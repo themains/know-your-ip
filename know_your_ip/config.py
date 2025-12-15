@@ -233,7 +233,7 @@ def load_from_env() -> dict[str, Any]:
             continue
 
         # Remove prefix and split into section and field
-        config_key = key[len(prefix):].lower()
+        config_key = key[len(prefix) :].lower()
         parts = config_key.split("_", 1)
 
         if len(parts) != 2:
@@ -308,7 +308,9 @@ def load_config(config_file: Path | None = None) -> KnowYourIPConfig:
                 file_config = tomllib.load(f)
                 config_dict.update(file_config)
         except (OSError, tomllib.TOMLDecodeError) as e:
-            raise ConfigurationError(f"Failed to load config file {config_file}: {e}") from e
+            raise ConfigurationError(
+                f"Failed to load config file {config_file}: {e}"
+            ) from e
 
     # Override with environment variables
     env_config = load_from_env()
@@ -411,4 +413,3 @@ class ConfigurationError(Exception):
     """Configuration-related errors."""
 
     pass
-

@@ -100,7 +100,9 @@ username = "test_user"
             f.flush()
 
             try:
-                with pytest.raises(ConfigurationError, match="Failed to load config file"):
+                with pytest.raises(
+                    ConfigurationError, match="Failed to load config file"
+                ):
                     load_config(Path(f.name))
             finally:
                 os.unlink(f.name)

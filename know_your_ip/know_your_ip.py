@@ -161,9 +161,7 @@ def maxmind_geocode_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
             * ISP Database (GeoIP2-ISP.mmdb)
     """
 
-    reader = geoip2.database.Reader(
-        config.maxmind.db_path / "GeoLite2-City.mmdb"
-    )
+    reader = geoip2.database.Reader(config.maxmind.db_path / "GeoLite2-City.mmdb")
     response = reader.city(ip)
     out = flatten_dict(response.raw, separator=".")
     reader.close()
@@ -173,7 +171,9 @@ def maxmind_geocode_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     return result
 
 
-def geonames_timezone(config: KnowYourIPConfig, lat: float, lng: float) -> dict[str, Any]:
+def geonames_timezone(
+    config: KnowYourIPConfig, lat: float, lng: float
+) -> dict[str, Any]:
     """Get timezone for a latitude/longitude from GeoNames
 
     Args:
@@ -281,20 +281,17 @@ def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            headers = {
-                "Key": config.abuseipdb.api_key,
-                "Accept": "application/json"
-            }
+            headers = {"Key": config.abuseipdb.api_key, "Accept": "application/json"}
             params = {
                 "ipAddress": ip,
                 "maxAgeInDays": config.abuseipdb.days,
-                "verbose": ""
+                "verbose": "",
             }
             r = requests.get(
                 "https://api.abuseipdb.com/api/v2/check",
                 headers=headers,
                 params=params,
-                timeout=30
+                timeout=30,
             )
             if r.status_code == 200:
                 response = r.json()
@@ -303,7 +300,9 @@ def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                     out = {}
 
                     # Core fields
-                    out["abuseipdb.abuse_confidence_score"] = data.get("abuseConfidencePercentage", 0)
+                    out["abuseipdb.abuse_confidence_score"] = data.get(
+                        "abuseConfidencePercentage", 0
+                    )
                     out["abuseipdb.country_code"] = data.get("countryCode")
                     out["abuseipdb.usage_type"] = data.get("usageType")
                     out["abuseipdb.isp"] = data.get("isp")
@@ -311,7 +310,9 @@ def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                     out["abuseipdb.is_public"] = data.get("isPublic")
                     out["abuseipdb.is_whitelisted"] = data.get("isWhitelisted")
                     out["abuseipdb.total_reports"] = data.get("totalReports", 0)
-                    out["abuseipdb.num_distinct_users"] = data.get("numDistinctUsers", 0)
+                    out["abuseipdb.num_distinct_users"] = data.get(
+                        "numDistinctUsers", 0
+                    )
                     out["abuseipdb.last_reported_at"] = data.get("lastReportedAt")
 
                     # Process categories with embedded mapping
@@ -321,7 +322,9 @@ def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                             cat_str = str(cat_id)
                             if cat_str in categories:
                                 category_names.append(categories[cat_str])
-                        out["abuseipdb.categories"] = "|".join(category_names) if category_names else ""
+                        out["abuseipdb.categories"] = (
+                            "|".join(category_names) if category_names else ""
+                        )
                     else:
                         out["abuseipdb.categories"] = ""
                 break
@@ -334,7 +337,9 @@ def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                 out["abuseipdb.status"] = "auth_failed"
                 break
             else:
-                logging.warning(f"AbuseIPDB API returned status {r.status_code}: {r.text}")
+                logging.warning(
+                    f"AbuseIPDB API returned status {r.status_code}: {r.text}"
+                )
                 retry += 1
                 if retry < MAX_RETRIES:
                     time.sleep(retry * 2)  # Exponential backoff
@@ -524,7 +529,7 @@ def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
 
     headers = {
         "Authorization": f"Bearer {config.censys.api_key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     retry = 0
@@ -548,7 +553,9 @@ def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                             asn_data = host_data["autonomous_system"]
                             data["censys.asn"] = asn_data.get("asn")
                             data["censys.as_name"] = asn_data.get("name")
-                            data["censys.as_country_code"] = asn_data.get("country_code")
+                            data["censys.as_country_code"] = asn_data.get(
+                                "country_code"
+                            )
 
                         # Location information
                         if "location" in host_data:
@@ -561,11 +568,19 @@ def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                         # Services information
                         if "services" in host_data and host_data["services"]:
                             services = host_data["services"]
-                            ports = [str(s.get("port", "")) for s in services if "port" in s]
+                            ports = [
+                                str(s.get("port", "")) for s in services if "port" in s
+                            ]
                             data["censys.ports"] = "|".join(ports) if ports else ""
 
-                            protocols = [s.get("transport_protocol", "") for s in services if "transport_protocol" in s]
-                            data["censys.protocols"] = "|".join({p for p in protocols if p})
+                            protocols = [
+                                s.get("transport_protocol", "")
+                                for s in services
+                                if "transport_protocol" in s
+                            ]
+                            data["censys.protocols"] = "|".join(
+                                {p for p in protocols if p}
+                            )
                     break
 
                 case 404:
@@ -584,7 +599,9 @@ def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                     break
 
                 case _:
-                    logging.warning(f"Censys API returned status {r.status_code}: {r.text}")
+                    logging.warning(
+                        f"Censys API returned status {r.status_code}: {r.text}"
+                    )
                     retry += 1
                     if retry < MAX_RETRIES:
                         time.sleep(retry * 2)  # Exponential backoff
@@ -707,9 +724,13 @@ def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                         if "categories" in attributes:
                             categories = attributes["categories"]
                             if isinstance(categories, dict):
-                                data["virustotal.categories"] = "|".join(categories.keys())
+                                data["virustotal.categories"] = "|".join(
+                                    categories.keys()
+                                )
                             elif isinstance(categories, list):
-                                data["virustotal.categories"] = "|".join([str(c) for c in categories])
+                                data["virustotal.categories"] = "|".join(
+                                    [str(c) for c in categories]
+                                )
                     break
                 case 404:
                     # IP not found in VirusTotal database
@@ -728,7 +749,9 @@ def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
                     break
                 case _:
                     # Other HTTP errors
-                    logging.warning(f"VirusTotal API returned status {r.status_code}: {r.text}")
+                    logging.warning(
+                        f"VirusTotal API returned status {r.status_code}: {r.text}"
+                    )
                     retry += 1
                     if retry < MAX_RETRIES:
                         time.sleep(retry * 2)  # Exponential backoff
@@ -870,6 +893,7 @@ def query_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         logging.error(e)
         # Note: verbose flag removed - logging should be controlled by logging level
         import traceback
+
         traceback.print_exc()
     return udata
 

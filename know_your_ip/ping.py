@@ -341,7 +341,9 @@ def do_one(
         except OSError as e:
             # etype, evalue, etb = sys.exc_info()
             logging.error(f"failed. (socket error: '{e}')")  # evalue.args[1])
-            logging.error("Note that python-ping uses RAW socketsand requiers root rights.")
+            logging.error(
+                "Note that python-ping uses RAW socketsand requiers root rights."
+            )
             raise  # raise the original error
     else:
         try:  # One could use UDP here, but it's obscure
@@ -353,7 +355,9 @@ def do_one(
         except OSError as e:
             # etype, evalue, etb = sys.exc_info()
             logging.error(f"failed. (socket error: '{e}')")  # evalue.args[1])
-            logging.error("Note that python-ping uses RAW socketsand requires root rights.")
+            logging.error(
+                "Note that python-ping uses RAW socketsand requires root rights."
+            )
             raise  # raise the original error
 
     # my_ID = os.getpid() & 0xFFFF
@@ -404,7 +408,14 @@ def do_one(
 
 
 # =============================================================================#
-def send_one_ping(mySocket: socket.socket, destIP: str, myID: int, mySeqNumber: int, numDataBytes: int, ipv6: bool = False) -> float | None:
+def send_one_ping(
+    mySocket: socket.socket,
+    destIP: str,
+    myID: int,
+    mySeqNumber: int,
+    numDataBytes: int,
+    ipv6: bool = False,
+) -> float | None:
     """
     Send one ping to the given >destIP<.
     """
@@ -461,7 +472,9 @@ def send_one_ping(mySocket: socket.socket, destIP: str, myID: int, mySeqNumber: 
 
 
 # =============================================================================#
-def receive_one_ping(mySocket: socket.socket, myID: int, timeout: int, ipv6: bool = False) -> tuple[float | None, int, int, int, int]:
+def receive_one_ping(
+    mySocket: socket.socket, myID: int, timeout: int, ipv6: bool = False
+) -> tuple[float | None, int, int, int, int]:
     """
     Receive the ping from the socket. Timeout = in ms
     """
