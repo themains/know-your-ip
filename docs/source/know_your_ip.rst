@@ -1,10 +1,6 @@
 Know Your IP
 --------------
 
-.. image:: https://travis-ci.org/themains/know_your_ip.svg?branch=master
-    :target: https://travis-ci.org/themains/know_your_ip
-.. image:: https://ci.appveyor.com/api/projects/status/qfvbu8h99ymtw2ub?svg=true
-    :target: https://ci.appveyor.com/project/themains/know_your_ip
 .. image:: https://img.shields.io/pypi/v/know_your_ip.svg
     :target: https://pypi.python.org/pypi/know_your_ip
 .. image:: https://readthedocs.org/projects/know_your_ip/badge/?version=latest
@@ -21,15 +17,15 @@ blacklisted), which ports are open, and what services are running (via
 a traceroute. 
 
 If you are curious about potential application of the package, we have a
-:download:`presentation <../../know_your_ip/presentation/kip.pdf>` on 
+:download:`presentation <../../presentation/kip.pdf>` on 
 its use in cybersecurity analysis workflow.
 
 You can use the package in two different ways. You can call it from the shell, or you can
 use it as an external library. From the shell, you can run ``know_your_ip``. It takes a csv 
-with a single column of IP addresses (sample input file: :download:`know_your_ip.cfg <../../know_your_ip/examples/input.csv>`), 
+with a single column of IP addresses (sample input file: :download:`input.csv <../../examples/input.csv>`), 
 details of the API keys to various services (in :download:`know_your_ip.cfg <../../know_your_ip/know_your_ip.cfg>`) 
 and which columns you would like from which service (in :download:`this example columns.txt <../../know_your_ip/columns.txt>`), 
-and appends the requested results to the IP list (sample output file: :download:`output.csv <../../know_your_ip/examples/output.csv>`). 
+and appends the requested results to the IP list (sample output file: :download:`output.csv <../../examples/output.csv>`). 
 This simple setup allows you to mix and match easily. 
 
 If you want to use it as an external library, the package also provides that. The function ``query_ip`` relies
@@ -37,8 +33,8 @@ on the same config files as ``know_your_ip`` and takes an IP address. We illustr
 also get data from specific services. For instance, if you only care about getting the MaxMind data, 
 use ``maxmind_geocode_ip``. If you would like data from the abuseipdb, call the ``abuseipdb_api`` function, etc. 
 These functions still rely on the global config and columns files. For examples of how to use the package, 
-see :download:`example.py <../../know_your_ip/examples/example.py>` or the jupyter notebook 
-`example.ipynb <https://github.com/themains/know_your_ip/blob/master/know_your_ip/examples/example.ipynb>`__.
+see :download:`example.py <../../examples/example.py>` or the jupyter notebook 
+`example.ipynb <https://github.com/themains/know-your-ip/blob/master/examples/example.ipynb>`__.
 
 Brief Primer on Functionality
 --------------------------------
@@ -265,8 +261,8 @@ From the command line
 As an External Library
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Please look at :download:`example.py <../../know_your_ip/examples/example.py>` or the jupyter notebook 
-`example.ipynb <https://github.com/themains/know_your_ip/blob/master/know_your_ip/examples/example.ipynb>`__. 
+Please look at :download:`example.py <../../examples/example.py>` or the jupyter notebook 
+`example.ipynb <https://github.com/themains/know-your-ip/blob/master/examples/example.ipynb>`__. 
 
 As an External Library with Pandas DataFrame
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -276,7 +272,7 @@ As an External Library with Pandas DataFrame
     import pandas as pd
     from know_your_ip import load_config, query_ip
 
-    df = pd.read_csv('know_your_ip/examples/input.csv', header=None)
+    df = pd.read_csv('examples/input.csv', header=None)
 
     args = load_config('know_your_ip/know_your_ip.cfg')
 

@@ -1,16 +1,15 @@
-# This workflow will upload a Python Package using Twine when a release is created
-# For more information see: https://help.github.com/en/actions/language-and-framework-guides/using-python-with-github-actions#publishing-to-package-registries
+# This workflow will upload a Python Package using trusted publishing
+# For more information see: https://docs.pypi.org/trusted-publishers/
 
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-name: Upload Python Package to PyPI
+name: Publish Python Package
 
 on:
+  workflow_dispatch:
   release:
     types: [published]
+
+permissions:
+  id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
 
 jobs:
   deploy:
@@ -18,26 +17,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        version: "latest"
+        
     - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
-    - name: Install dependencies
+      run: uv python install 3.11
+      
+    - name: Install dependencies and build
       run: |
-        python -m pip install --upgrade pip
-        pip install build
-    - name: Lint with flake8 
+        uv sync --extra dev
+        uv build
+        
+    - name: Lint with ruff
       run: |
-        pip install flake8
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings.
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
-    - name: Build package
-      run: python -m build
+        uv run ruff check .
+        uv run ruff format --check .
+        
     - name: Publish package
-      uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
-      with:
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }}
+      uses: pypa/gh-action-pypi-publish@release/v1

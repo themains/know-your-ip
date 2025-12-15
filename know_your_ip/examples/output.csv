@@ -1,6 +1,0 @@
-ip,maxmind.continent.names.en,maxmind.country.names.en,maxmind.location.time_zone,maxmind.postal.code,maxmind.registered_country.names.en,tzwhere.timezone,abuseipdb.bad_isp,abuseipdb.categories,ipvoid.blacklist_status,ipvoid.reverse_dns,shodan.asn,shodan.isp,shodan.vulns,shodan.os,shodan.ports
-94.31.29.154,Europe,United Kingdom,Europe/London,,United Kingdom,Europe/London,,,BLACKLISTED 1/96,94.31.29.154.IPYX-077437-ZYO.above.net,,,,,
-204.2.197.211,North America,United States,America/Denver,80111,United States,America/Denver,,,POSSIBLY SAFE 0/96,map-e2.pipelane.net,,,,,
-199.27.76.249,North America,United States,America/Los_Angeles,94107,United States,America/Los_Angeles,,,BLACKLISTED 1/96,Unknown,,,,,
-199.96.57.8,North America,United States,America/Los_Angeles,94103,United States,America/Los_Angeles,,,POSSIBLY SAFE 0/96,Unknown,,,,,
-23.235.39.249,North America,United States,,,United States,America/Chicago,,,POSSIBLY SAFE 0/96,Unknown,,,,,

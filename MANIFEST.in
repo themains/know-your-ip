@@ -1,4 +1,0 @@
-include README.rst
-include LICENSE
-include know_your_ip/know_your_ip.cfg
-include know_your_ip/columns.txt

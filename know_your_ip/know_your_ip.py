@@ -1,48 +1,48 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
-import sys
-import os
+from __future__ import annotations
+
 import argparse
 import logging
-import requests
-import time
-import signal
-from csv import DictWriter, DictReader
-from configparser import RawConfigParser
-from pkg_resources import resource_filename
-
+import os
 import re
-from bs4 import BeautifulSoup
+import signal
+import sys
+import time
 from collections import defaultdict
+from csv import DictReader, DictWriter
+from functools import partial
+from multiprocessing import Pool
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 
-import geoip2.webservice
 import geoip2.database
-
+import geoip2.webservice
+import requests
+import shodan
+from bs4 import BeautifulSoup
+from configparser import RawConfigParser
 
 from .ping import quiet_ping
 from .traceroute import os_traceroute
 
-from multiprocessing import Pool
-from functools import partial
-
-import shodan
-
 logging.getLogger("requests").setLevel(logging.WARNING)
 
-LOG_FILE = 'know_your_ip.log'
-CFG_FILE = resource_filename(__name__, "know_your_ip.cfg")
+LOG_FILE = Path('know_your_ip.log')
+CFG_FILE = Path(__file__).parent / "know_your_ip.cfg"
 
 MAX_RETRIES = 5
 
 
-def setup_logger():
-    """ Set up logging"""
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s %(levelname)-8s %(message)s',
-                        datefmt='%m-%d %H:%M',
-                        filename=LOG_FILE,
-                        filemode='w')
+def setup_logger() -> None:
+    """Set up logging."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)-8s %(message)s',
+        datefmt='%m-%d %H:%M',
+        filename=LOG_FILE,
+        filemode='w'
+    )
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
     formatter = logging.Formatter('%(message)s')

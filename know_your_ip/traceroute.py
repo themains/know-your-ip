@@ -1,19 +1,20 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
+
+from __future__ import annotations
 
 import os
 import shlex
-from subprocess import Popen, PIPE
+from subprocess import PIPE, Popen
 
 
-def os_traceroute(ip, max_hops=30):
+def os_traceroute(ip: str, max_hops: int = 30) -> bytes:
     if os.name == 'nt':
-        cmd = 'tracert -h {0} -d {1}'.format(max_hops, ip)
+        cmd = f'tracert -h {max_hops} -d {ip}'
     elif os.name == 'posix':
-        cmd = 'traceroute -m {0} -n {1} '.format(max_hops, ip)
+        cmd = f'traceroute -m {max_hops} -n {ip}'
     else:
         # FIXME: other OSes.
-        cmd = 'traceroute {0}'.format(ip)
+        cmd = f'traceroute {ip}'
 
     p = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
     out, err = p.communicate()
