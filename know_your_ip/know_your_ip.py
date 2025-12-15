@@ -10,25 +10,25 @@ import signal
 import sys
 import time
 from collections import defaultdict
+from configparser import RawConfigParser
 from csv import DictReader, DictWriter
 from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any
 
 import geoip2.database
 import geoip2.webservice
 import requests
 import shodan
 from bs4 import BeautifulSoup
-from configparser import RawConfigParser
 
 from .ping import quiet_ping
 from .traceroute import os_traceroute
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 
-LOG_FILE = Path('know_your_ip.log')
+LOG_FILE = Path("know_your_ip.log")
 CFG_FILE = Path(__file__).parent / "know_your_ip.cfg"
 
 MAX_RETRIES = 5
@@ -38,31 +38,31 @@ def setup_logger() -> None:
     """Set up logging."""
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s %(levelname)-8s %(message)s',
-        datefmt='%m-%d %H:%M',
+        format="%(asctime)s %(levelname)-8s %(message)s",
+        datefmt="%m-%d %H:%M",
         filename=LOG_FILE,
-        filemode='w'
+        filemode="w",
     )
     console = logging.StreamHandler()
     console.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(message)s')
+    formatter = logging.Formatter("%(message)s")
     console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
+    logging.getLogger("").addHandler(console)
 
 
-def table_to_list(table: Any) -> List[List[str]]:
+def table_to_list(table: Any) -> list[list[str]]:
     """Convert BeautifulSoup table to list of lists."""
     dct = table_to_2d_dict(table)
     return list(iter_2d_dict(dct))
 
 
-def table_to_2d_dict(table: Any) -> Dict[int, Dict[int, str]]:
+def table_to_2d_dict(table: Any) -> dict[int, dict[int, str]]:
     """Convert BeautifulSoup table to 2D dictionary."""
     result = defaultdict(lambda: defaultdict())
-    for row_i, row in enumerate(table.find_all('tr')):
-        for col_i, col in enumerate(row.find_all(['td', 'th'])):
-            colspan = int(col.get('colspan', 1))
-            rowspan = int(col.get('rowspan', 1))
+    for row_i, row in enumerate(table.find_all("tr")):
+        for col_i, col in enumerate(row.find_all(["td", "th"])):
+            colspan = int(col.get("colspan", 1))
+            rowspan = int(col.get("rowspan", 1))
             col_data = col.text
             while row_i in result and col_i in result[row_i]:
                 col_i += 1
@@ -72,30 +72,35 @@ def table_to_2d_dict(table: Any) -> Dict[int, Dict[int, str]]:
     return result
 
 
-def iter_2d_dict(dct: Dict[int, Dict[int, str]]) -> List[str]:
+def iter_2d_dict(dct: dict[int, dict[int, str]]) -> list[str]:
     """Iterate over 2D dictionary and yield column lists."""
-    for i, row in sorted(dct.items()):
+    for _i, row in sorted(dct.items()):
         cols = []
-        for j, col in sorted(row.items()):
+        for _j, col in sorted(row.items()):
             cols.append(col)
         yield cols
 
 
-def flatten_dict(dd: Any, separator: str = '_', prefix: str = '') -> Dict[str, Any]:
+def flatten_dict(dd: Any, separator: str = "_", prefix: str = "") -> dict[str, Any]:
     """Flatten nested dictionary using separator."""
-    return {prefix + separator + k if prefix else k: v
+    return (
+        {
+            prefix + separator + k if prefix else k: v
             for kk, vv in dd.items()
             for k, v in flatten_dict(vv, separator, kk).items()
-            } if isinstance(dd, dict) else {prefix: dd}
+        }
+        if isinstance(dd, dict)
+        else {prefix: dd}
+    )
 
 
 def clean_colname(name: str) -> str:
     """Clean column name to be valid identifier."""
-    c = re.sub(r'\W|^(?=\d)', '_', name)
-    return (re.sub('_+', '_', c)).lower()
+    c = re.sub(r"\W|^(?=\d)", "_", name)
+    return (re.sub("_+", "_", c)).lower()
 
 
-def load_config(args: Optional[Union[str, Any]] = None) -> Any:
+def load_config(args: str | Any | None = None) -> Any:
     """Load details of API keys etc. from the config. file
 
     Args:
@@ -120,82 +125,82 @@ def load_config(args: Optional[Union[str, Any]] = None) -> Any:
     config.read(args.config)
 
     # Maxmind configuration
-    args.maxmind_dbpath = config.get('maxmind', 'dbpath')
+    args.maxmind_dbpath = config.get("maxmind", "dbpath")
     if not os.path.exists(args.maxmind_dbpath):
-        args.maxmind_dbpath = str(Path(__file__).parent / 'db')
-    args.maxmind_enable = config.getint('maxmind', 'enable')
+        args.maxmind_dbpath = str(Path(__file__).parent / "db")
+    args.maxmind_enable = config.getint("maxmind", "enable")
 
     # GeoNames.org configuration
-    args.geonames_username = config.get('geonames', 'username')
-    args.geonames_enable = config.getint('geonames', 'enable')
+    args.geonames_username = config.get("geonames", "username")
+    args.geonames_enable = config.getint("geonames", "enable")
 
     # tzwhere configuration
-    args.tzwhere_enable = config.getint('tzwhere', 'enable')
+    args.tzwhere_enable = config.getint("tzwhere", "enable")
 
     # abuseipdb configuration
-    args.abuseipdb_enable = config.getint('abuseipdb', 'enable')
-    args.abuseipdb_key = config.get('abuseipdb', 'key')
-    args.abuseipdb_days = config.getint('abuseipdb', 'days')
-    cat_file = config.get('abuseipdb', 'cat_catid')
+    args.abuseipdb_enable = config.getint("abuseipdb", "enable")
+    args.abuseipdb_key = config.get("abuseipdb", "key")
+    args.abuseipdb_days = config.getint("abuseipdb", "days")
+    cat_file = config.get("abuseipdb", "cat_catid")
     if not os.path.exists(cat_file):
-        cat_file = str(Path(__file__).parent / 'abuseipdb_cat_catid.csv')
+        cat_file = str(Path(__file__).parent / "abuseipdb_cat_catid.csv")
     cat = {}
-    with open(cat_file, 'rt') as f:
+    with open(cat_file) as f:
         reader = DictReader(f)
         for r in reader:
-            cat[r['catid']] = r['category']
+            cat[r["catid"]] = r["category"]
     args.abuseipdb_category = cat
 
     # ping configuration
-    args.ping_enable = config.getint('ping', 'enable')
-    args.ping_timeout = config.getint('ping', 'timeout')
-    args.ping_count = config.getint('ping', 'count')
+    args.ping_enable = config.getint("ping", "enable")
+    args.ping_timeout = config.getint("ping", "timeout")
+    args.ping_count = config.getint("ping", "count")
 
     # traceroute configuration
-    args.traceroute_enable = config.getint('traceroute', 'enable')
-    args.traceroute_max_hops = config.getint('traceroute', 'max_hops')
+    args.traceroute_enable = config.getint("traceroute", "enable")
+    args.traceroute_max_hops = config.getint("traceroute", "max_hops")
 
     # ipvoid configuration
-    args.ipvoid_enable = config.getint('ipvoid', 'enable')
+    args.ipvoid_enable = config.getint("ipvoid", "enable")
 
     # apivoid configuration
-    args.apivoid_enable = config.getint('apivoid', 'enable')
-    args.apivoid_api_key = config.get('apivoid', 'api_key')
+    args.apivoid_enable = config.getint("apivoid", "enable")
+    args.apivoid_api_key = config.get("apivoid", "api_key")
 
     # Censys configuration
-    args.censys_enable = config.getint('censys', 'enable')
-    args.censys_api_url = config.get('censys', 'api_url')
-    args.censys_uid = config.get('censys', 'uid')
-    args.censys_secret = config.get('censys', 'secret')
+    args.censys_enable = config.getint("censys", "enable")
+    args.censys_api_url = config.get("censys", "api_url")
+    args.censys_uid = config.get("censys", "uid")
+    args.censys_secret = config.get("censys", "secret")
 
     # shodan.io configuration
-    args.shodan_enable = config.getint('shodan', 'enable')
-    args.shodan_api_key = config.get('shodan', 'api_key')
+    args.shodan_enable = config.getint("shodan", "enable")
+    args.shodan_api_key = config.get("shodan", "api_key")
 
     # virustotal configuration
-    args.virustotal_enable = config.getint('virustotal', 'enable')
-    args.virustotal_api_key = config.get('virustotal', 'api_key')
+    args.virustotal_enable = config.getint("virustotal", "enable")
+    args.virustotal_api_key = config.get("virustotal", "api_key")
 
     # Output columns configuration
-    columns_file = config.get('output', 'columns')
+    columns_file = config.get("output", "columns")
     if not os.path.exists(columns_file):
-        columns_file = str(Path(__file__).parent / 'columns.txt')
+        columns_file = str(Path(__file__).parent / "columns.txt")
     lines = []
     try:
-        with open(columns_file, 'rt') as f:
-            lines = [a.strip() for a in f.read().split('\n')]
+        with open(columns_file) as f:
+            lines = [a.strip() for a in f.read().split("\n")]
     except (FileNotFoundError, PermissionError, OSError) as e:
-        logging.error(f'Failed to read columns file {columns_file}: {e}')
+        logging.error(f"Failed to read columns file {columns_file}: {e}")
     columns = []
-    for l in lines:
-        if len(l) and not l.startswith('#'):
-            columns.append(l)
+    for line in lines:
+        if len(line) and not line.startswith("#"):
+            columns.append(line)
     args.output_columns = columns
 
     return args
 
 
-def maxmind_geocode_ip(args: Any, ip: str) -> Dict[str, Any]:
+def maxmind_geocode_ip(args: Any, ip: str) -> dict[str, Any]:
     """Get location of IP address from Maxmind City database (GeoLite2-City.mmdb)
 
     Args:
@@ -214,18 +219,19 @@ def maxmind_geocode_ip(args: Any, ip: str) -> Dict[str, Any]:
             * ISP Database (GeoIP2-ISP.mmdb)
     """
 
-    reader = geoip2.database.Reader(os.path.join(args.maxmind_dbpath,
-                                    'GeoLite2-City.mmdb'))
+    reader = geoip2.database.Reader(
+        os.path.join(args.maxmind_dbpath, "GeoLite2-City.mmdb")
+    )
     response = reader.city(ip)
-    out = flatten_dict(response.raw, separator='.')
+    out = flatten_dict(response.raw, separator=".")
     reader.close()
     result = {}
     for k in out.keys():
-        result[f'maxmind.{k}'] = out[k]
+        result[f"maxmind.{k}"] = out[k]
     return result
 
 
-def geonames_timezone(args: Any, lat: float, lng: float) -> Dict[str, Any]:
+def geonames_timezone(args: Any, lat: float, lng: float) -> dict[str, Any]:
     """Get timezone for a latitude/longitude from GeoNames
 
     Args:
@@ -253,25 +259,24 @@ def geonames_timezone(args: Any, lat: float, lng: float) -> Dict[str, Any]:
     """
 
     data = {}
-    payload = {'lat': lat, 'lng': lng, 'username': args.geonames_username}
+    payload = {"lat": lat, "lng": lng, "username": args.geonames_username}
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            r = requests.get('http://api.geonames.org/timezoneJSON',
-                             params=payload)
+            r = requests.get("http://api.geonames.org/timezoneJSON", params=payload)
             if r.status_code == 200:
                 out = r.json()
                 for k in out.keys():
-                    data[f'geonames.{k}'] = out[k]
+                    data[f"geonames.{k}"] = out[k]
                 break
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f'geonames_timezone: {e}')
+            logging.warning(f"geonames_timezone: {e}")
             retry += 1
             time.sleep(retry)
     return data
 
 
-def tzwhere_timezone(args: Any, lat: float, lng: float) -> Optional[str]:
+def tzwhere_timezone(args: Any, lat: float, lng: float) -> str | None:
     """Get timezone of a latitude/longitude using the tzwhere package.
 
     Args:
@@ -288,18 +293,18 @@ def tzwhere_timezone(args: Any, lat: float, lng: float) -> Optional[str]:
 
     from tzwhere import tzwhere
 
-    if not hasattr(args, 'tzwhere_tz'):
+    if not hasattr(args, "tzwhere_tz"):
         args.tzwhere_tz = tzwhere.tzwhere()
     return args.tzwhere_tz.tzNameAt(lat, lng)
 
 
-def abuseipdb_api(args: Any, ip: str) -> Dict[str, Any]:
+def abuseipdb_api(args: Any, ip: str) -> dict[str, Any]:
     """Get information from AbuseIPDB via `API <https://www.abuseipdb.com/api.html>`_
 
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: AbuseIPDB information
 
@@ -315,27 +320,29 @@ def abuseipdb_api(args: Any, ip: str) -> Dict[str, Any]:
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            r = requests.get(f'https://www.abuseipdb.com/check/{ip}/json?key={args.abuseipdb_key}&days={args.abuseipdb_days}')
+            r = requests.get(
+                f"https://www.abuseipdb.com/check/{ip}/json?key={args.abuseipdb_key}&days={args.abuseipdb_days}"
+            )
             if r.status_code == 200:
                 js = r.json()
                 if isinstance(js, list):
                     if len(js) == 0:
                         break
                     js = js[0]
-                out = dict()
+                out = {}
                 for k in js.keys():
-                    if k == 'category':
+                    if k == "category":
                         c = []
                         for a in js[k]:
                             a = str(a)
                             if a in args.abuseipdb_category:
                                 c.append(args.abuseipdb_category[a])
-                        out[f'abuseipdb.{k}'] = '|'.join(c)
+                        out[f"abuseipdb.{k}"] = "|".join(c)
                     else:
-                        out[f'abuseipdb.{k}'] = js[k]
+                        out[f"abuseipdb.{k}"] = js[k]
                 break
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f'abuseipdb_api: {e}')
+            logging.warning(f"abuseipdb_api: {e}")
             retry += 1
             time.sleep(retry)
     return out
@@ -347,7 +354,7 @@ def abuseipdb_web(args, ip):
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: AbuseIPDB information
 
@@ -362,37 +369,37 @@ def abuseipdb_web(args, ip):
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            r = requests.get('http://www.abuseipdb.com/check/' + ip)
+            r = requests.get("http://www.abuseipdb.com/check/" + ip)
             if r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'lxml')
-                for t in soup.select('table'):
+                soup = BeautifulSoup(r.text, "lxml")
+                for t in soup.select("table"):
                     table = table_to_list(t)
                     for r in table:
                         col = r[0].strip()
                         col = clean_colname(col)
-                        data['abuseipdb.' + col] = r[1]
+                        data["abuseipdb." + col] = r[1]
                     break
-                div = soup.select('div#body div.well')[0]
+                div = soup.select("div#body div.well")[0]
                 result = div.text
-                if result.find('was not found') != -1:
-                    data['abuseipdb.found'] = 0
+                if result.find("was not found") != -1:
+                    data["abuseipdb.found"] = 0
                 else:
-                    data['abuseipdb.found'] = 1
+                    data["abuseipdb.found"] = 1
                 count = 0
-                for m in re.finditer(r'was reported (\d+) time', result):
+                for m in re.finditer(r"was reported (\d+) time", result):
                     count = int(m.group(1))
                     break
                 if count:
-                    for t in soup.select('table')[1:]:
+                    for t in soup.select("table")[1:]:
                         table = table_to_list(t)
                         rows = []
                         for r in table:
-                            rows.append('|'.join(r))
+                            rows.append("|".join(r))
                         break
-                    data['abuseipdb.history'] = '\n'.join(rows)
+                    data["abuseipdb.history"] = "\n".join(rows)
                 break
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f'abuseipdb_web: {e}')
+            logging.warning(f"abuseipdb_web: {e}")
             retry += 1
             time.sleep(retry)
     return data
@@ -404,7 +411,7 @@ def ipvoid_scan(args, ip):
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: IPVoid information
 
@@ -416,25 +423,27 @@ def ipvoid_scan(args, ip):
     while retry < MAX_RETRIES:
         try:
             data = {}
-            r = requests.post('http://www.ipvoid.com/ip-blacklist-check/', data={'ip': ip})
+            r = requests.post(
+                "http://www.ipvoid.com/ip-blacklist-check/", data={"ip": ip}
+            )
             if r.status_code == 200:
-                soup = BeautifulSoup(r.text, 'lxml')
+                soup = BeautifulSoup(r.text, "lxml")
                 data = {}
-                tables = soup.select('table')
+                tables = soup.select("table")
                 table = table_to_list(tables[0])
                 for r in table:
-                    col = 'ipvoid.' + clean_colname(r[0])
+                    col = "ipvoid." + clean_colname(r[0])
                     data[col] = r[1]
                 alerts = []
-                for tr in tables[1].select('tr'):
-                    tds = tr.select('td')
+                for tr in tables[1].select("tr"):
+                    tds = tr.select("td")
                     if len(tds) == 2:
-                        if len(tds[0].select('i.text-danger')):
+                        if len(tds[0].select("i.text-danger")):
                             alerts.append(tds[0].text.strip())
-                data['ipvoid.alerts'] = '|'.join(alerts)
+                data["ipvoid.alerts"] = "|".join(alerts)
                 break
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f'ipvoid_scan: {e}')
+            logging.warning(f"ipvoid_scan: {e}")
             retry += 1
             time.sleep(retry)
     return data
@@ -457,8 +466,8 @@ def apivoid_api(args, ip):
         apivoid_api(args, '222.186.30.49')
     """
 
-    url = 'https://endpoint.apivoid.com/iprep/v1/pay-as-you-go/'
-    params = {'ip': ip, 'key': args.apivoid_api_key}
+    url = "https://endpoint.apivoid.com/iprep/v1/pay-as-you-go/"
+    params = {"ip": ip, "key": args.apivoid_api_key}
     retry = 0
     data = {}
     while retry < MAX_RETRIES:
@@ -466,22 +475,23 @@ def apivoid_api(args, ip):
             r = requests.get(url, params=params)
             if r.status_code == 200:
                 out = r.json()
-                logging.info('apivoid_api: credit_remained: %0.2f, estimated_queries: %s' %
-                             (out['credits_remained'], out['estimated_queries']))
-                out = flatten_dict(out['data']['report'], separator='.')
+                logging.info(
+                    f"apivoid_api: credit_remained: {out['credits_remained']:.2f}, estimated_queries: {out['estimated_queries']}"
+                )
+                out = flatten_dict(out["data"]["report"], separator=".")
                 for k in out.keys():
                     if isinstance(out[k], list):
-                        out[k] = '|'.join([str(i) for i in out[k]])
-                    data['apivoid.' + k] = out[k]
+                        out[k] = "|".join([str(i) for i in out[k]])
+                    data["apivoid." + k] = out[k]
                 break
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f'apivoid_api: {e}')
+            logging.warning(f"apivoid_api: {e}")
             retry += 1
             time.sleep(retry)
     return data
 
 
-def censys_api(args: Any, ip: str) -> Dict[str, Any]:
+def censys_api(args: Any, ip: str) -> dict[str, Any]:
     """Get information from Censys `Search API <https://censys.io/api/v1/docs/search>`_
 
     Args:
@@ -499,44 +509,47 @@ def censys_api(args: Any, ip: str) -> Dict[str, Any]:
 
     fields = []
     for c in args.output_columns:
-        if c.startswith('censys.'):
-            fields.append(c.replace('censys.', ''))
+        if c.startswith("censys."):
+            fields.append(c.replace("censys.", ""))
 
-    payload = {"query": "ip:" + ip,
-               "page": 1,
-               "fields": fields,
-               }
+    payload = {
+        "query": "ip:" + ip,
+        "page": 1,
+        "fields": fields,
+    }
 
     data = {}
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            r = requests.post(args.censys_api_url + "/search/ipv4",
-                              auth=(args.censys_uid, args.censys_secret),
-                              json=payload)
+            r = requests.post(
+                args.censys_api_url + "/search/ipv4",
+                auth=(args.censys_uid, args.censys_secret),
+                json=payload,
+            )
             if r.status_code == 200:
                 out = r.json()
-                if 'results' in out and len(out['results']):
-                    out = out['results'][0]
+                if "results" in out and len(out["results"]):
+                    out = out["results"][0]
                 for k in out.keys():
                     if isinstance(out[k], list):
-                        out[k] = '|'.join([str(i) for i in out[k]])
-                    data['censys.' + k] = out[k]
+                        out[k] = "|".join([str(i) for i in out[k]])
+                    data["censys." + k] = out[k]
                 break
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f'censys_api: {e}')
+            logging.warning(f"censys_api: {e}")
             retry += 1
             time.sleep(retry)
     return data
 
 
-def shodan_api(args: Any, ip: str) -> Dict[str, Any]:
+def shodan_api(args: Any, ip: str) -> dict[str, Any]:
     """Get information from Shodan
 
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: Shodan information
 
@@ -551,20 +564,20 @@ def shodan_api(args: Any, ip: str) -> Dict[str, Any]:
         out = flatten_dict(out)
         for k in out.keys():
             if isinstance(out[k], list):
-                out[k] = '|'.join([str(i) for i in out[k]])
-            data['shodan.' + k] = out[k]
+                out[k] = "|".join([str(i) for i in out[k]])
+            data["shodan." + k] = out[k]
     except shodan.APIError as e:
-        logging.warning(f'shodan_api(ip={ip}): {e}')
+        logging.warning(f"shodan_api(ip={ip}): {e}")
     return data
 
 
-def virustotal_api(args: Any, ip: str) -> Dict[str, Any]:
+def virustotal_api(args: Any, ip: str) -> dict[str, Any]:
     """Get information from VirusTotal `Public API <https://www.virustotal.com/th/documentation/public-api/>`_
 
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: Virustotal information
 
@@ -579,8 +592,8 @@ def virustotal_api(args: Any, ip: str) -> Dict[str, Any]:
         virustotal_api(args, '222.186.30.49')
     """
 
-    url = 'https://www.virustotal.com/vtapi/v2/ip-address/report'
-    params = {'ip': ip, 'apikey': args.virustotal_api_key}
+    url = "https://www.virustotal.com/vtapi/v2/ip-address/report"
+    params = {"ip": ip, "apikey": args.virustotal_api_key}
     retry = 0
     data = {}
     while retry < MAX_RETRIES:
@@ -591,11 +604,11 @@ def virustotal_api(args: Any, ip: str) -> Dict[str, Any]:
                 out = flatten_dict(out)
                 for k in out.keys():
                     if isinstance(out[k], list):
-                        out[k] = '|'.join([str(i) for i in out[k]])
-                    data['virustotal.' + k] = out[k]
+                        out[k] = "|".join([str(i) for i in out[k]])
+                    data["virustotal." + k] = out[k]
                 break
         except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f'virustotal_api: {e}')
+            logging.warning(f"virustotal_api: {e}")
             retry += 1
             time.sleep(retry)
     return data
@@ -607,7 +620,7 @@ def ping(args, ip):
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: Ping statistics information
 
@@ -621,14 +634,14 @@ def ping(args, ip):
     """
 
     data = {}
-    data['ping.count'] = args.ping_count
-    data['ping.timeout'] = args.ping_timeout
+    data["ping.count"] = args.ping_count
+    data["ping.timeout"] = args.ping_timeout
     stat = quiet_ping(ip, timeout=args.ping_timeout, count=args.ping_count)
     if stat:
-        data['ping.max'] = stat[0]
-        data['ping.min'] = stat[1]
-        data['ping.avg'] = stat[2]
-        data['ping.percent_loss'] = stat[3] * 100
+        data["ping.max"] = stat[0]
+        data["ping.min"] = stat[1]
+        data["ping.avg"] = stat[2]
+        data["ping.percent_loss"] = stat[3] * 100
     return data
 
 
@@ -638,7 +651,7 @@ def traceroute(args, ip):
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: traceroute information
 
@@ -652,8 +665,8 @@ def traceroute(args, ip):
 
     data = {}
     hops = os_traceroute(ip, max_hops=args.traceroute_max_hops)
-    data['traceroute.max_hops'] = args.traceroute_max_hops
-    data['traceroute.hops'] = hops
+    data["traceroute.max_hops"] = args.traceroute_max_hops
+    data["traceroute.hops"] = hops
     return data
 
 
@@ -667,7 +680,7 @@ def query_ip(args, ip):
     Args:
         args: via the ``load_config`` function.
         ip (str): an IP address
-    
+
     Returns:
         dict: Information on the given IP address
 
@@ -675,7 +688,7 @@ def query_ip(args, ip):
         query_ip(args, '222.186.30.49')
     """
 
-    data = {'ip': ip}
+    data = {"ip": ip}
     udata = {}
     try:
         if args.ping_enable:
@@ -687,15 +700,15 @@ def query_ip(args, ip):
         try:
             if args.maxmind_enable:
                 out = maxmind_geocode_ip(args, ip)
-                lat = out['maxmind.location.latitude']
-                lng = out['maxmind.location.longitude']
+                lat = out["maxmind.location.latitude"]
+                lng = out["maxmind.location.longitude"]
                 data.update(out)
             if args.geonames_enable:
                 out = geonames_timezone(args, lat, lng)
                 data.update(out)
             if args.tzwhere_enable:
                 tz = tzwhere_timezone(args, lat, lng)
-                data['tzwhere.timezone'] = tz
+                data["tzwhere.timezone"] = tz
         except Exception as e:
             logging.error(e)
         if args.abuseipdb_enable:
@@ -722,13 +735,14 @@ def query_ip(args, ip):
         for k, v in data.items():
             if k in args.output_columns:
                 try:
-                    udata[k] = v.encode('utf-8')
+                    udata[k] = v.encode("utf-8")
                 except:
                     udata[k] = v
     except Exception as e:
         logging.error(e)
         if args.verbose:
             import traceback
+
             traceback.print_exc()
     return udata
 
@@ -736,23 +750,29 @@ def query_ip(args, ip):
 def main():
     setup_logger()
 
-    parser = argparse.ArgumentParser(description='Know Your IP')
-    parser.add_argument('ip', nargs='*', help='IP Address(es)')
-    parser.add_argument('-f', '--file', help='List of IP addresses file')
-    parser.add_argument('-c', '--config', default=CFG_FILE,
-                        help='Configuration file')
-    parser.add_argument('-o', '--output', default='output.csv',
-                        help='Output CSV file name')
-    parser.add_argument('-n', '--max-conn', type=int, default=5,
-                        help='Max concurrent connections')
-    parser.add_argument('--from', default=0, type=int, dest='from_row',
-                        help='From row number')
-    parser.add_argument('--to', default=0, type=int,
-                        help='To row number')
-    parser.add_argument('-v', '--verbose', dest='verbose', action='store_true',
-                        help='Verbose mode')
-    parser.add_argument('--no-header', dest='header', action='store_false',
-                        help='Output without header at the first row')
+    parser = argparse.ArgumentParser(description="Know Your IP")
+    parser.add_argument("ip", nargs="*", help="IP Address(es)")
+    parser.add_argument("-f", "--file", help="List of IP addresses file")
+    parser.add_argument("-c", "--config", default=CFG_FILE, help="Configuration file")
+    parser.add_argument(
+        "-o", "--output", default="output.csv", help="Output CSV file name"
+    )
+    parser.add_argument(
+        "-n", "--max-conn", type=int, default=5, help="Max concurrent connections"
+    )
+    parser.add_argument(
+        "--from", default=0, type=int, dest="from_row", help="From row number"
+    )
+    parser.add_argument("--to", default=0, type=int, help="To row number")
+    parser.add_argument(
+        "-v", "--verbose", dest="verbose", action="store_true", help="Verbose mode"
+    )
+    parser.add_argument(
+        "--no-header",
+        dest="header",
+        action="store_false",
+        help="Output without header at the first row",
+    )
     parser.set_defaults(header=True)
     parser.set_defaults(verbose=False)
 
@@ -767,10 +787,13 @@ def main():
 
     if args.file:
         with open(args.file) as f:
-            args.ip = [a.strip() for a in f.read().split('\n')
-                       if ((a.strip() != '') and not a.startswith('#'))]
+            args.ip = [
+                a.strip()
+                for a in f.read().split("\n")
+                if ((a.strip() != "") and not a.startswith("#"))
+            ]
 
-    f = open(args.output, 'wt')
+    f = open(args.output, "w")
     writer = DictWriter(f, fieldnames=args.output_columns)
     if args.header:
         writer.writeheader()
@@ -785,14 +808,14 @@ def main():
         logging.info(f"Row: {row}")
         try:
             partial_query_ip = partial(query_ip, args)
-            ips = args.ip[row:row + args.max_conn]
+            ips = args.ip[row : row + args.max_conn]
             results = pool.map(partial_query_ip, ips)
             for data in results:
                 edata = {}
                 for k, v in data.items():
                     if v is not None:
                         try:
-                            edata[k] = v.decode('utf-8')
+                            edata[k] = v.decode("utf-8")
                         except:
                             edata[k] = v
                 writer.writerow(edata)
@@ -805,6 +828,7 @@ def main():
             logging.error(e)
             if args.verbose:
                 import traceback
+
                 traceback.print_exc()
     f.close()
 

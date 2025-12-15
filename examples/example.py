@@ -1,27 +1,28 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
 from pprint import pprint
-from know_your_ip import (load_config,
-                          maxmind_geocode_ip,
-                          geonames_timezone,
-                          tzwhere_timezone,
-                          ipvoid_scan,
-                          abuseipdb_web,
-                          abuseipdb_api,
-                          censys_api,
-                          shodan_api,
-                          virustotal_api,
-                          ping,
-                          traceroute
-                          )
+
+from know_your_ip import (
+    abuseipdb_api,
+    abuseipdb_web,
+    censys_api,
+    geonames_timezone,
+    ipvoid_scan,
+    load_config,
+    maxmind_geocode_ip,
+    ping,
+    shodan_api,
+    traceroute,
+    tzwhere_timezone,
+    virustotal_api,
+)
 
 if __name__ == "__main__":
     # load configuration from file (default: 'know_your_ip.cfg')
     args = load_config()
 
     # target IP
-    ip = '222.186.30.49'
+    ip = "222.186.30.49"
 
     # Maxmind API
     print("Maxmind...")
@@ -29,8 +30,8 @@ if __name__ == "__main__":
     pprint(result)
 
     # Get lat/long
-    lat = result['maxmind.location.latitude']
-    lng = result['maxmind.location.longitude']
+    lat = result["maxmind.location.latitude"]
+    lng = result["maxmind.location.longitude"]
 
     # Timezone from lat/lng
     print("Geonames...")

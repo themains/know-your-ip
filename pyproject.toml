@@ -7,7 +7,7 @@ name = "know_your_ip"
 version = "0.2.0"
 description = "Get data on IP addresses"
 readme = "README.rst"
-license = {text = "MIT"}
+license = "MIT"
 authors = [
     {name = "Suriyan Laohaprapanon", email = "suriyant@gmail.com"},
     {name = "Gaurav Sood", email = "gsood07@gmail.com"}
@@ -17,7 +17,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: System Administrators",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
