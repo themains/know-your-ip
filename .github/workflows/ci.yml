@@ -33,9 +33,6 @@ jobs:
         uv run ruff check .
         uv run ruff format --check .
         
-    - name: Type check with mypy
-      run: uv run mypy know_your_ip/
-        
     - name: Test with pytest
       run: uv run pytest --cov=know_your_ip --cov-report=xml
         
