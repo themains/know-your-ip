@@ -225,7 +225,7 @@ You can register to get the API keys at the following URLs:
 
 **TOML Configuration File**
 
-Create a ``know_your_ip.toml`` file with your API keys and settings:
+Create a ``know_your_ip.toml`` file with your API keys and settings (see ``examples/know_your_ip.toml`` for full example):
 
 .. code-block:: toml
 
