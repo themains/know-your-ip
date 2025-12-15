@@ -1,0 +1,21 @@
+category,catid
+Fraud Order,3
+DDoS,4
+FTP Brute-force,5
+Ping Of Death,6
+Phishing,7
+Proxy IP,9
+Web Spam,10
+Email Spam,11
+Blog Spam,12
+VPN IP,13
+Port scan,14
+Hacking,15
+SQL Injection,16
+Spoofing,17
+Brute-Force,18
+Bad Web Bot,19
+Exploited Host,20
+Web App Attack,21
+SSH,22
+IoT Targeted,23

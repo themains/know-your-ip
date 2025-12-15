@@ -1,0 +1,247 @@
+\documentclass[compress]{beamer}
+\setbeamercolor{normal text}{fg=black}
+\beamertemplatesolidbackgroundcolor{white}
+\setbeamercovered{transparent, still covered={\opaqueness<1->{0}}, again covered={\opaqueness<1->{30}}}
+\usecolortheme[named=black]{structure}
+\definecolor{links}{HTML}{98AFC7}
+\hypersetup{colorlinks,linkcolor=,urlcolor=links}
+\usepackage{caption}
+\captionsetup{labelformat=empty}
+\setbeamertemplate{navigation symbols}{}
+
+\definecolor{dark-red}{rgb}{0.75,0.10,0.10}
+\definecolor{grey}{rgb}{.3, 0.3, .3}
+\definecolor{amber}{rgb}{1.0, 0.75, 0.0}
+\definecolor{arylideyellow}{rgb}{0.91, 0.84, 0.42}
+\definecolor{azure(colorwheel)}{rgb}{0.0, 0.5, 1.0}
+\definecolor{blue}{rgb}{0, .1, 0.42}
+
+\usepackage[scaled]{helvet}
+\renewcommand*\familydefault{\sfdefault} %% Only if the base font of the document is to be sans serif
+\usepackage[T1]{fontenc}
+\usepackage{setspace}
+%\usepackage{beamerthemesplit}
+\usepackage{graphics}
+\usepackage{Sweave}
+
+\usepackage[normalem]{ulem}
+
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{verbatim}
+\usepackage{amssymb}
+\usepackage{wrapfig}
+\def\labelitemi{\textemdash}
+\setbeamertemplate{frametitle}{
+  %\begin{centering}
+    \vskip10pt
+    \insertframetitle
+    \par
+  %\end{centering}
+}
+\title[Better Know Your IP]{Better Know Your IP}
+\author[]{\vspace{.15cm}\\}
+\date[]{}
+\begin{document}
+
+\newenvironment{large_enum}{
+\Large
+\begin{itemize}
+  \setlength{\itemsep}{7pt}
+  \setlength{\parskip}{0pt}
+  \setlength{\parsep}{0pt}
+}{\end{itemize}}
+
+\begin{comment}
+
+setwd(paste0(githubdir, "know_your_ip/know_your_ip/presentation/"))
+tools::texi2dvi("kip.tex", pdf = TRUE, clean = TRUE)
+setwd(basedir)
+
+\end{comment}
+ \frame
+  {
+    \titlepage
+  }
+
+\begin{frame}
+\frametitle{Example Application: Cybersecurity Analysis}
+\begin{large_enum}
+\item[-]<2-5> General Workflow: ETL \pause \pause $\leadsto$ `Analytics' \pause $\leadsto$ `Outliers' \pause $\leadsto$ `Deep Dive'
+\item[-]<6-7> Push Button Time Allocation within Data Scientists:
+        \begin{itemize}
+        \item[-]<7->Analytics ($\sim$ 25\%)
+        \item[-]<7->Deep Dive (\color{red}{$\sim$ 75\%})
+        \end{itemize}
+\item[]<8-12> A {\color{red}\sout{Deep Dive}} Dip Into Deep Dive
+  \begin{itemize}
+   \item[-]<9->  Manual sifting of small data
+   \item[-]<10-> Find `interesting' outliers
+   \item[-]<11-> Tell story about those outliers
+   \item[-]<12-> Including, why the outlier was flagged as such
+  \end{itemize}
+\item[]<13-> Aim: Better ways of learning about, and from outliers.
+\end{large_enum}
+\end{frame}
+
+\begin{frame}
+\frametitle{Better ways of learning about, and from outliers}
+ \begin{large_enum}
+  \item[-]<2-5> Three components:
+    \begin{itemize}
+      \item[-]<3-> Data driven account of why an outlier is an outlier
+      \item[-]<4-> Data driven inference about patterns of outliers
+      \item[-]<5-> \color{red}{Diving Deeply More Quickly}
+    \end{itemize}
+  \item[-]<6-> (Better) Know Your IP
+    \begin{itemize}
+      \item[-]<7-> Gets `known knowns' and `easily knowns'
+      \item[-]<8-> Where: Lat/Long, City, Country, Time zone
+      \item[-]<9-> Which ports are open, which services are running
+      \item[-]<10-> Ping and traceroute
+      \item[-]<11-> Blacklisted or not, and for what
+      \item[-]<12-> Zmap and Zgrab scans of IPv4
+    \end{itemize}
+\end{large_enum}
+\end{frame}
+
+\begin{frame}
+\frametitle{Notes and Concerns}
+\begin{large_enum}
+  \item[-]<1-5> Geocoding:
+    \begin{itemize}
+      \item[-]<2-> Start with DB of known `landmarks'
+      \item[-]<3-> Compute maximum distance to last router from multiple landmarks using max. Internet speed
+      \item[-]<4-> Gives an approximate bounding box. Take centroid of that.
+      \item[-]<5-> Average geolocation error can be hefty. For instance, \href{http://www.geoipinfo.com/}{GeoIPInfo} puts me $\sim$ 30 miles away
+    \end{itemize}
+  \item[-]<6-9> Time Zone
+    \begin{itemize}
+      \item[-]<7-> Globe split into 24 Time Zones. Conditional on lat/long, we know time zone.
+      \item[-]<8-> But countries create own rules
+      \item[-]<9-> India, for instance, has 30 minute offset. Or for e.g., Mountain Time
+    \end{itemize}
+  \item[-]<10-11> Active scanning (ping, traceroute)
+  \begin{itemize}
+    \item[-]<11-> You give away your location. \color{red}{{\tt tcpdump}}.
+  \end{itemize}
+\end{large_enum}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Know, Know Your IP}
+\begin{large_enum}
+\item[-]<2>Links to:
+  \begin{itemize}
+  \item[-]<2-> GeoNames
+  \item[-]<2-> MaxMind
+  \item[-]<2-> Virustotal
+  \item[-]<2-> IpVoid
+  \item[-]<2-> AbuseIPDB
+  \item[-]<2-> Shodan
+  \item[-]<2-> Censys
+  \item[-]<2-> Ping
+  \item[-]<2-> Traceroute
+  \item[-]<2-> tzwhere
+  \end{itemize}
+\item[-]<3> Rate limits for free tier
+\item[-]<4> \color{red}{Use it for a handful of IPs}
+\end{large_enum}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Know, Know Your IP}
+\begin{large_enum}
+\item[-]<2-> Installation\\\normalsize
+\begin{verbatim}
+pip install know_your_ip
+
+# If traceroute not installed on Linux
+sudo apt-get install traceroute
+\end{verbatim}
+\item[-]<3-> Components:
+
+\begin{itemize}
+\item[1. ]<4-> Configuration file: \\
+\begin{verbatim}
+know_your_ip.cfg
+
+[abuseipdb]
+enable = 1
+user_id = 1234
+key = a0fbe08ccef49245179490713e551b589
+cat_catid = abuseipdb_cat_catid.csv
+
+[ipvoid]
+enable = 1
+
+...
+\end{verbatim}
+\end{itemize}
+\end{large_enum}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Components of KIP}
+\begin{large_enum}
+\item[]<1->
+\begin{itemize}
+\item[2. ]<1-> What columns do you want
+\begin{verbatim}
+columns.txt
+
+# Ping
+ping.timeout
+ping.count
+ping.max
+ ...
+
+# abuseipdb API
+abuseipdb.bad_isp
+abuseipdb.categories
+abuseipdb.reports
+abuseipdb.total
+ ...
+\end{verbatim}
+\end{itemize}
+\end{large_enum}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Using KIP}
+\begin{verbatim}
+python know_your_ip.py
+
+# Paths
+--file path_to_input_file (default input.csv)
+--config path_config_file   (default know_your_ip.cfg)
+--output path_to_output_file (default output.csv)
+
+# Max connections (multi-threaded)
+--maxconn MAX_CONN
+
+# From/to Row
+--from from_row
+--to to_row
+
+# Verbose
+--verbose verbose
+
+\end{verbatim}
+\end{frame}
+
+\begin{frame}[fragile]
+\frametitle{Actually Using KIP}
+\begin{verbatim}
+
+# For one/few IP(s)
+python know_your_ip.py 94.31.29.154
+python know_your_ip.py 94.31.29.154 204.2.197.211
+
+# File, some rows
+python know_your_ip.py --file input_small.csv --from 1
+ --to 2
+
+\end{verbatim}
+\end{frame}
+\end{document}

@@ -1,0 +1,123 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "know_your_ip"
+version = "0.2.1"
+description = "Get data on IP addresses"
+readme = "README.md"
+license = "MIT"
+authors = [
+    {name = "Suriyan Laohaprapanon", email = "suriyant@gmail.com"},
+    {name = "Gaurav Sood", email = "gsood07@gmail.com"}
+]
+keywords = ["ip", "geoip", "ipvoid", "abuseip", "shodan", "virustotal", "blacklisted", "geolocation", "cybersecurity"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Networking",
+    "Topic :: Utilities"
+]
+requires-python = ">=3.11"
+dependencies = [
+    "geoip2",
+    "tzwhere",
+    "BeautifulSoup4",
+    "lxml",
+    "shodan",
+    "requests",
+    "pydantic>=2.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "pytest",
+    "pytest-cov",
+    "pre-commit",
+    "build",
+    "twine"
+]
+test = [
+    "pytest",
+    "pytest-cov",
+    "pytest-mock"
+]
+docs = [
+    "sphinx>=7.0",
+    "furo",
+    "sphinx-copybutton",
+    "myst-parser"
+]
+
+[project.urls]
+Homepage = "https://github.com/themains/know-your-ip"
+Repository = "https://github.com/themains/know-your-ip"
+Documentation = "https://themains.github.io/know-your-ip/"
+"Bug Tracker" = "https://github.com/themains/know-your-ip/issues"
+
+[project.scripts]
+know_your_ip = "know_your_ip.know_your_ip:main"
+
+[tool.setuptools]
+packages = ["know_your_ip"]
+
+# No package data files needed - using embedded category mappings
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+
+[tool.deptry]
+# Exclude directories from scanning
+extend_exclude = [
+    ".tox",
+    ".mypy_cache",
+    "build",
+    "dist",
+    "docs"
+]
+
+# Map package names to module names for correct detection
+package_module_name_map = { "BeautifulSoup4" = "bs4" }
+
+# Development dependency groups to ignore for unused dependency checks
+pep621_dev_dependency_groups = ["dev", "test", "docs"]
+
+# Ignore lxml - used indirectly by BeautifulSoup as XML parser
+per_rule_ignores = { "DEP002" = ["lxml"] }
