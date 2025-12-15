@@ -13,3 +13,12 @@ build
 dist
 *.egg-info
 *.whl
+.coverage
+.coverage.*
+htmlcov/
+*.cover
+.hypothesis/
+.pytest_cache/
+coverage.xml
+*.py,cover
+.github/.DS_Store

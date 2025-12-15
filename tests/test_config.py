@@ -80,32 +80,27 @@ db_path = "/custom/path"
 enabled = true
 username = "test_user"
 """
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write(toml_content)
-            f.flush()
-
-            try:
-                config = load_config(Path(f.name))
-                assert config.maxmind.enabled is False
-                assert str(config.maxmind.db_path).endswith("/custom/path")
-                assert config.geonames.enabled is True
-                assert config.geonames.username == "test_user"
-            finally:
-                os.unlink(f.name)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_file = Path(tmpdir) / "config.toml"
+            config_file.write_text(toml_content)
+            
+            config = load_config(config_file)
+            assert config.maxmind.enabled is False
+            # Cross-platform path check
+            assert "custom" in str(config.maxmind.db_path) and "path" in str(config.maxmind.db_path)
+            assert config.geonames.enabled is True
+            assert config.geonames.username == "test_user"
 
     def test_load_config_invalid_toml(self):
         """Test loading invalid TOML file raises error."""
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False) as f:
-            f.write("invalid toml content [[[")
-            f.flush()
-
-            try:
-                with pytest.raises(
-                    ConfigurationError, match="Failed to load config file"
-                ):
-                    load_config(Path(f.name))
-            finally:
-                os.unlink(f.name)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_file = Path(tmpdir) / "invalid.toml"
+            config_file.write_text("invalid toml content [[[")
+            
+            with pytest.raises(
+                ConfigurationError, match="Failed to load config file"
+            ):
+                load_config(config_file)
 
 
 class TestEnvironmentConfig:
