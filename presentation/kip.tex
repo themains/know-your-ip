@@ -7,9 +7,9 @@
 \hypersetup{colorlinks,linkcolor=,urlcolor=links}
 \usepackage{caption}
 \captionsetup{labelformat=empty}
-\setbeamertemplate{navigation symbols}{} 
+\setbeamertemplate{navigation symbols}{}
 
-\definecolor{dark-red}{rgb}{0.75,0.10,0.10} 
+\definecolor{dark-red}{rgb}{0.75,0.10,0.10}
 \definecolor{grey}{rgb}{.3, 0.3, .3}
 \definecolor{amber}{rgb}{1.0, 0.75, 0.0}
 \definecolor{arylideyellow}{rgb}{0.91, 0.84, 0.42}
@@ -38,7 +38,7 @@
     \insertframetitle
     \par
   %\end{centering}
-} 
+}
 \title[Better Know Your IP]{Better Know Your IP}
 \author[]{\vspace{.15cm}\\}
 \date[]{}
@@ -55,7 +55,7 @@
 \begin{comment}
 
 setwd(paste0(githubdir, "know_your_ip/know_your_ip/presentation/"))
-tools::texi2dvi("kip.tex", pdf = TRUE, clean = TRUE) 
+tools::texi2dvi("kip.tex", pdf = TRUE, clean = TRUE)
 setwd(basedir)
 
 \end{comment}
@@ -73,13 +73,13 @@ setwd(basedir)
         \item[-]<7->Analytics ($\sim$ 25\%)
         \item[-]<7->Deep Dive (\color{red}{$\sim$ 75\%})
         \end{itemize}
-\item[]<8-12> A {\color{red}\sout{Deep Dive}} Dip Into Deep Dive 
+\item[]<8-12> A {\color{red}\sout{Deep Dive}} Dip Into Deep Dive
   \begin{itemize}
-   \item[-]<9->  Manual sifting of small data 
-   \item[-]<10-> Find `interesting' outliers 
+   \item[-]<9->  Manual sifting of small data
+   \item[-]<10-> Find `interesting' outliers
    \item[-]<11-> Tell story about those outliers
-   \item[-]<12-> Including, why the outlier was flagged as such 
-  \end{itemize} 
+   \item[-]<12-> Including, why the outlier was flagged as such
+  \end{itemize}
 \item[]<13-> Aim: Better ways of learning about, and from outliers.
 \end{large_enum}
 \end{frame}
@@ -88,9 +88,9 @@ setwd(basedir)
 \frametitle{Better ways of learning about, and from outliers}
  \begin{large_enum}
   \item[-]<2-5> Three components:
-    \begin{itemize} 
+    \begin{itemize}
       \item[-]<3-> Data driven account of why an outlier is an outlier
-      \item[-]<4-> Data driven inference about patterns of outliers 
+      \item[-]<4-> Data driven inference about patterns of outliers
       \item[-]<5-> \color{red}{Diving Deeply More Quickly}
     \end{itemize}
   \item[-]<6-> (Better) Know Your IP
@@ -109,7 +109,7 @@ setwd(basedir)
 \frametitle{Notes and Concerns}
 \begin{large_enum}
   \item[-]<1-5> Geocoding:
-    \begin{itemize} 
+    \begin{itemize}
       \item[-]<2-> Start with DB of known `landmarks'
       \item[-]<3-> Compute maximum distance to last router from multiple landmarks using max. Internet speed
       \item[-]<4-> Gives an approximate bounding box. Take centroid of that.
@@ -118,7 +118,7 @@ setwd(basedir)
   \item[-]<6-9> Time Zone
     \begin{itemize}
       \item[-]<7-> Globe split into 24 Time Zones. Conditional on lat/long, we know time zone.
-      \item[-]<8-> But countries create own rules 
+      \item[-]<8-> But countries create own rules
       \item[-]<9-> India, for instance, has 30 minute offset. Or for e.g., Mountain Time
     \end{itemize}
   \item[-]<10-11> Active scanning (ping, traceroute)
@@ -135,7 +135,7 @@ setwd(basedir)
   \begin{itemize}
   \item[-]<2-> GeoNames
   \item[-]<2-> MaxMind
-  \item[-]<2-> Virustotal 
+  \item[-]<2-> Virustotal
   \item[-]<2-> IpVoid
   \item[-]<2-> AbuseIPDB
   \item[-]<2-> Shodan
@@ -157,7 +157,7 @@ setwd(basedir)
 pip install know_your_ip
 
 # If traceroute not installed on Linux
-sudo apt-get install traceroute 
+sudo apt-get install traceroute
 \end{verbatim}
 \item[-]<3-> Components:
 
@@ -210,7 +210,7 @@ abuseipdb.total
 \begin{frame}[fragile]
 \frametitle{Using KIP}
 \begin{verbatim}
-python know_your_ip.py  
+python know_your_ip.py
 
 # Paths
 --file path_to_input_file (default input.csv)
@@ -235,7 +235,7 @@ python know_your_ip.py
 \begin{verbatim}
 
 # For one/few IP(s)
-python know_your_ip.py 94.31.29.154 
+python know_your_ip.py 94.31.29.154
 python know_your_ip.py 94.31.29.154 204.2.197.211
 
 # File, some rows

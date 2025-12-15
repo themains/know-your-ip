@@ -11,7 +11,7 @@ Welcome to Know Your IP's documentation!
    :caption: Contents:
 
    know_your_ip
-      
+
 Indices and tables
 ==================
 

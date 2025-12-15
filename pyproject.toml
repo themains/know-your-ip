@@ -107,13 +107,13 @@ testpaths = ["tests"]
 # Exclude directories from scanning
 extend_exclude = [
     ".tox",
-    ".mypy_cache", 
+    ".mypy_cache",
     "build",
     "dist",
     "docs"
 ]
 
-# Map package names to module names for correct detection  
+# Map package names to module names for correct detection
 package_module_name_map = { "BeautifulSoup4" = "bs4" }
 
 # Development dependency groups to ignore for unused dependency checks

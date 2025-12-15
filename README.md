@@ -114,7 +114,7 @@ config.abuseipdb.days = 30
 ### API Registration Links
 
 - [VirusTotal](https://www.virustotal.com/gui/join-us) - 500 requests/day, 4/min free
-- [AbuseIPDB](https://www.abuseipdb.com/register) - 1,000 requests/day free  
+- [AbuseIPDB](https://www.abuseipdb.com/register) - 1,000 requests/day free
 - [Shodan](https://account.shodan.io/register) - Paid service ($69+/month)
 - [Censys](https://search.censys.io/register) - 250 requests/month free
 - [GeoNames](https://www.geonames.org/login) - 10,000 requests/day, 1,000/hour free
@@ -130,7 +130,7 @@ from know_your_ip import load_config, query_ip
 # Load IPs from CSV
 df = pd.read_csv('ips.csv')
 
-# Load configuration  
+# Load configuration
 config = load_config()
 
 # Analyze all IPs
@@ -148,7 +148,7 @@ location = maxmind_geocode_ip(config, "8.8.8.8")
 print(f"Country: {location['maxmind.country.names.en']}")
 
 # Get only threat intelligence
-threat_data = virustotal_api(config, "8.8.8.8") 
+threat_data = virustotal_api(config, "8.8.8.8")
 print(f"Malicious detections: {threat_data['virustotal.malicious']}")
 ```
 
@@ -158,7 +158,7 @@ print(f"Malicious detections: {threat_data['virustotal.malicious']}")
 # Process large files with concurrency
 know_your_ip --file large_ips.csv --max-conn 10 --config config.toml
 
-# Process specific range  
+# Process specific range
 know_your_ip --file ips.csv --from 100 --to 200
 ```
 
@@ -178,7 +178,7 @@ know_your_ip --file ips.csv --from 100 --to 200
 ### Configuration Classes
 
 - `KnowYourIPConfig` - Main configuration
-- `MaxMindConfig` - Geolocation settings  
+- `MaxMindConfig` - Geolocation settings
 - `VirusTotalConfig` - Threat intel settings
 - `AbuseIPDBConfig` - Abuse data settings
 - `OutputConfig` - Output column configuration
@@ -205,7 +205,7 @@ optional arguments:
   -n MAX_CONN, --max-conn MAX_CONN
                         Max concurrent connections
   --from FROM_ROW       From row number
-  --to TO               To row number  
+  --to TO               To row number
   -v, --verbose         Verbose mode
   --no-header           Output without header
 ```
@@ -224,7 +224,7 @@ optional arguments:
 
 See the [`examples/`](examples/) directory for:
 - [example.py](examples/example.py) - Basic usage examples
-- [example.ipynb](examples/example.ipynb) - Jupyter notebook tutorial  
+- [example.ipynb](examples/example.ipynb) - Jupyter notebook tutorial
 - [input.csv](examples/input.csv) - Sample input file
 - [output.csv](examples/output.csv) - Sample output
 
@@ -237,7 +237,7 @@ See the [`examples/`](examples/) directory for:
 
 ### Platform Support
 - ✅ Linux
-- ✅ macOS  
+- ✅ macOS
 - ✅ Windows
 - ✅ Docker/containers
 

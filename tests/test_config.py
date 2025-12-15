@@ -83,11 +83,13 @@ username = "test_user"
         with tempfile.TemporaryDirectory() as tmpdir:
             config_file = Path(tmpdir) / "config.toml"
             config_file.write_text(toml_content)
-            
+
             config = load_config(config_file)
             assert config.maxmind.enabled is False
             # Cross-platform path check
-            assert "custom" in str(config.maxmind.db_path) and "path" in str(config.maxmind.db_path)
+            assert "custom" in str(config.maxmind.db_path) and "path" in str(
+                config.maxmind.db_path
+            )
             assert config.geonames.enabled is True
             assert config.geonames.username == "test_user"
 
@@ -96,10 +98,8 @@ username = "test_user"
         with tempfile.TemporaryDirectory() as tmpdir:
             config_file = Path(tmpdir) / "invalid.toml"
             config_file.write_text("invalid toml content [[[")
-            
-            with pytest.raises(
-                ConfigurationError, match="Failed to load config file"
-            ):
+
+            with pytest.raises(ConfigurationError, match="Failed to load config file"):
                 load_config(config_file)
 
 

@@ -11,27 +11,27 @@ Get comprehensive data on IP addresses. Learn where they are located (lat/long,
 country, city, time zone), whether they are flagged as malicious (by
 `AbuseIPDB <https://www.abuseipdb.com>`__,
 `VirusTotal <https://www.virustotal.com>`__,
-`IPVoid <https://ipvoid.com/>`__, etc.), which ports are open and what 
-services are running (via `Shodan <https://shodan.io>`__), and network 
-diagnostics (ping, traceroute). 
+`IPVoid <https://ipvoid.com/>`__, etc.), which ports are open and what
+services are running (via `Shodan <https://shodan.io>`__), and network
+diagnostics (ping, traceroute).
 
 If you are curious about potential application of the package, we have a
-:download:`presentation <../../presentation/kip.pdf>` on 
+:download:`presentation <../../presentation/kip.pdf>` on
 its use in cybersecurity analysis workflow.
 
 You can use the package in two different ways. You can call it from the shell, or you can
-use it as an external library. From the shell, you can run ``know_your_ip``. It takes a csv 
-with a single column of IP addresses (sample input file: :download:`input.csv <../../examples/input.csv>`), 
-and a modern TOML configuration file with API keys and output settings, 
-and appends the requested results to the IP list (sample output file: :download:`output.csv <../../examples/output.csv>`). 
-This simple setup allows you to mix and match easily. 
+use it as an external library. From the shell, you can run ``know_your_ip``. It takes a csv
+with a single column of IP addresses (sample input file: :download:`input.csv <../../examples/input.csv>`),
+and a modern TOML configuration file with API keys and output settings,
+and appends the requested results to the IP list (sample output file: :download:`output.csv <../../examples/output.csv>`).
+This simple setup allows you to mix and match easily.
 
 If you want to use it as an external library, the package also provides that. The function ``query_ip`` uses
-the modern Pydantic configuration system and takes an IP address. You can 
-also get data from specific services. For instance, if you only care about getting the MaxMind data, 
-use ``maxmind_geocode_ip``. If you would like data from the abuseipdb, call the ``abuseipdb_api`` function, etc. 
-These functions use the type-safe ``KnowYourIPConfig`` configuration object. For examples of how to use the package, 
-see :download:`example.py <../../examples/example.py>` or the jupyter notebook 
+the modern Pydantic configuration system and takes an IP address. You can
+also get data from specific services. For instance, if you only care about getting the MaxMind data,
+use ``maxmind_geocode_ip``. If you would like data from the abuseipdb, call the ``abuseipdb_api`` function, etc.
+These functions use the type-safe ``KnowYourIPConfig`` configuration object. For examples of how to use the package,
+see :download:`example.py <../../examples/example.py>` or the jupyter notebook
 `example.ipynb <https://github.com/themains/know-your-ip/blob/master/examples/example.ipynb>`__.
 
 What's New in v0.2.0
@@ -41,7 +41,7 @@ The latest version brings significant modernization and improvements:
 
 **Modern Configuration System**
 - TOML configuration format with Pydantic v2 validation
-- Type-safe configuration with field validators  
+- Type-safe configuration with field validators
 - Environment variable support (``KNOW_YOUR_IP_*`` prefix)
 - Embedded AbuseIPDB category mapping (no external CSV files)
 
@@ -50,7 +50,7 @@ The latest version brings significant modernization and improvements:
 - Updated rate limits and improved error handling
 - Modern Python 3.11+ features (match/case syntax, union types)
 
-**Performance Improvements** 
+**Performance Improvements**
 - Eliminated file I/O operations for category lookups
 - Self-contained category dictionary with all 23 AbuseIPDB categories
 - Faster startup and reduced dependencies
@@ -72,7 +72,7 @@ Brief Primer on Functionality
    a boundary within which the router must be present and then takes the
    centroid of it. The accuracy of these inferences is generally
    unknown, but can be fairly \`poor.' For instance, most geolocation
-   services place my IP more than 30 miles away from where I am. 
+   services place my IP more than 30 miles away from where I am.
    Try http://www.geoipinfo.com/.
 
    The script provides hook to `Maxmind City Lite
@@ -100,15 +100,15 @@ Brief Primer on Functionality
 
 For its ease, we choose a `Python hook to nodeJS lat/long to
 timezone <https://github.com/pegler/>`__. To get the timezone, we first
-need to geocode the IP (see above). The function ``tzwhere_timezone`` takes 
+need to geocode the IP (see above). The function ``tzwhere_timezone`` takes
 lat/long and returns timezone.
 
 -  **Ping**: Sends out a ICMP echo request and waits for the reply.
    Measures round-trip time (min, max, and mean), reporting errors and
-   packet loss. If there is a timeout, the function produces nothing. If 
+   packet loss. If there is a timeout, the function produces nothing. If
    there is a reply, it returns::
 
-    packets_sent, packets_received, packets_lost, min_time, 
+    packets_sent, packets_received, packets_lost, min_time,
     max_time, avg_time
 
 -  **Traceroute**: Sends a UDP (or ICMP) packet. Builds the path for how
@@ -197,7 +197,7 @@ socket and you must have root (on Linux) or Admin (on Windows) privileges to run
     pip install know_your_ip
 
     # On Ubuntu Linux (if traceroute command not installed)
-    sudo apt-get install traceroute 
+    sudo apt-get install traceroute
 
 Getting KYIP Ready For Use
 ----------------------------
@@ -256,7 +256,7 @@ Create a ``know_your_ip.toml`` file with your API keys and settings:
     [output]
     columns = [
         "ip",
-        "maxmind.country.names.en", 
+        "maxmind.country.names.en",
         "maxmind.location.time_zone",
         "abuseipdb.categories",
         "virustotal.reputation",
@@ -326,8 +326,8 @@ From the command line
 As an External Library
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Please look at :download:`example.py <../../examples/example.py>` or the jupyter notebook 
-`example.ipynb <https://github.com/themains/know-your-ip/blob/master/examples/example.ipynb>`__. 
+Please look at :download:`example.py <../../examples/example.py>` or the jupyter notebook
+`example.ipynb <https://github.com/themains/know-your-ip/blob/master/examples/example.ipynb>`__.
 
 As an External Library with Pandas DataFrame
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
