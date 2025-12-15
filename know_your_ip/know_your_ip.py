@@ -205,7 +205,9 @@ def geonames_timezone(
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            r = requests.get("http://api.geonames.org/timezoneJSON", params=payload)
+            r = requests.get(
+                "http://api.geonames.org/timezoneJSON", params=payload, timeout=30
+            )
             if r.status_code == 200:
                 out = r.json()
                 for k in out.keys():
@@ -372,7 +374,7 @@ def abuseipdb_web(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            r = requests.get("http://www.abuseipdb.com/check/" + ip)
+            r = requests.get("http://www.abuseipdb.com/check/" + ip, timeout=30)
             if r.status_code == 200:
                 soup = BeautifulSoup(r.text, "lxml")
                 for t in soup.select("table"):
@@ -427,7 +429,7 @@ def ipvoid_scan(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         try:
             data = {}
             r = requests.post(
-                "http://www.ipvoid.com/ip-blacklist-check/", data={"ip": ip}
+                "http://www.ipvoid.com/ip-blacklist-check/", data={"ip": ip}, timeout=30
             )
             if r.status_code == 200:
                 soup = BeautifulSoup(r.text, "lxml")
@@ -475,7 +477,7 @@ def apivoid_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     data = {}
     while retry < MAX_RETRIES:
         try:
-            r = requests.get(url, params=params)
+            r = requests.get(url, params=params, timeout=30)
             if r.status_code == 200:
                 out = r.json()
                 logging.info(
