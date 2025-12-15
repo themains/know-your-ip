@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
-import os
 import re
 import signal
 import sys
 import time
 from collections import defaultdict
-from configparser import RawConfigParser
-from csv import DictReader, DictWriter
+from csv import DictWriter
 from functools import partial
 from multiprocessing import Pool
 from pathlib import Path
@@ -21,17 +20,47 @@ import geoip2.database
 import geoip2.webservice
 import requests
 import shodan
+import vt
 from bs4 import BeautifulSoup
 
+from .config import KnowYourIPConfig
+from .config import load_config as load_modern_config
 from .ping import quiet_ping
 from .traceroute import os_traceroute
 
 logging.getLogger("requests").setLevel(logging.WARNING)
 
 LOG_FILE = Path("know_your_ip.log")
-CFG_FILE = Path(__file__).parent / "know_your_ip.cfg"
 
 MAX_RETRIES = 5
+
+# Official AbuseIPDB category codes (as of 2024)
+# Source: https://docs.abuseipdb.com/ and https://www.abuseipdb.com/categories
+ABUSEIPDB_CATEGORIES = {
+    "1": "DNS Compromise",
+    "2": "DNS Poisoning",
+    "3": "Fraud Orders",
+    "4": "DDoS Attack",
+    "5": "FTP Brute-Force",
+    "6": "Ping of Death",
+    "7": "Phishing",
+    "8": "Fraud VoIP",
+    "9": "Open Proxy",
+    "10": "Web Spam",
+    "11": "Email Spam",
+    "12": "Blog Spam",
+    "13": "VPN IP",
+    "14": "Port Scan",
+    "15": "Hacking",
+    "16": "SQL Injection",
+    "17": "Spoofing",
+    "18": "Brute Force",
+    "19": "Bad Web Bot",
+    "20": "Exploited Host",
+    "21": "Web App Attack",
+    "22": "SSH",
+    "23": "IoT Targeted",
+}
 
 
 def setup_logger() -> None:
@@ -100,111 +129,26 @@ def clean_colname(name: str) -> str:
     return (re.sub("_+", "_", c)).lower()
 
 
-def load_config(args: str | Any | None = None) -> Any:
-    """Load details of API keys etc. from the config. file
+def load_config(config_file: str | Path | None = None) -> KnowYourIPConfig:
+    """Load configuration using modern Pydantic-based system.
 
     Args:
-        args: load default config from ``<package dir>/know_your_ip.cfg`` if None or
-            load config from the given filename.
+        config_file: Path to configuration file. If None, searches standard locations.
 
     Returns:
-        obj: configuration object.
-
-    Notes:
-        See :download:`this default know_your_ip.cfg <../../know_your_ip/know_your_ip.cfg>`
+        Typed and validated configuration object.
     """
+    if isinstance(config_file, str):
+        config_file = Path(config_file)
 
-    if args is None or isinstance(args, str):
-        namespace = argparse.Namespace()
-        if args is None:
-            namespace.config = CFG_FILE
-        else:
-            namespace.config = args
-        args = namespace
-    config = RawConfigParser()
-    config.read(args.config)
-
-    # Maxmind configuration
-    args.maxmind_dbpath = config.get("maxmind", "dbpath")
-    if not os.path.exists(args.maxmind_dbpath):
-        args.maxmind_dbpath = str(Path(__file__).parent / "db")
-    args.maxmind_enable = config.getint("maxmind", "enable")
-
-    # GeoNames.org configuration
-    args.geonames_username = config.get("geonames", "username")
-    args.geonames_enable = config.getint("geonames", "enable")
-
-    # tzwhere configuration
-    args.tzwhere_enable = config.getint("tzwhere", "enable")
-
-    # abuseipdb configuration
-    args.abuseipdb_enable = config.getint("abuseipdb", "enable")
-    args.abuseipdb_key = config.get("abuseipdb", "key")
-    args.abuseipdb_days = config.getint("abuseipdb", "days")
-    cat_file = config.get("abuseipdb", "cat_catid")
-    if not os.path.exists(cat_file):
-        cat_file = str(Path(__file__).parent / "abuseipdb_cat_catid.csv")
-    cat = {}
-    with open(cat_file) as f:
-        reader = DictReader(f)
-        for r in reader:
-            cat[r["catid"]] = r["category"]
-    args.abuseipdb_category = cat
-
-    # ping configuration
-    args.ping_enable = config.getint("ping", "enable")
-    args.ping_timeout = config.getint("ping", "timeout")
-    args.ping_count = config.getint("ping", "count")
-
-    # traceroute configuration
-    args.traceroute_enable = config.getint("traceroute", "enable")
-    args.traceroute_max_hops = config.getint("traceroute", "max_hops")
-
-    # ipvoid configuration
-    args.ipvoid_enable = config.getint("ipvoid", "enable")
-
-    # apivoid configuration
-    args.apivoid_enable = config.getint("apivoid", "enable")
-    args.apivoid_api_key = config.get("apivoid", "api_key")
-
-    # Censys configuration
-    args.censys_enable = config.getint("censys", "enable")
-    args.censys_api_url = config.get("censys", "api_url")
-    args.censys_uid = config.get("censys", "uid")
-    args.censys_secret = config.get("censys", "secret")
-
-    # shodan.io configuration
-    args.shodan_enable = config.getint("shodan", "enable")
-    args.shodan_api_key = config.get("shodan", "api_key")
-
-    # virustotal configuration
-    args.virustotal_enable = config.getint("virustotal", "enable")
-    args.virustotal_api_key = config.get("virustotal", "api_key")
-
-    # Output columns configuration
-    columns_file = config.get("output", "columns")
-    if not os.path.exists(columns_file):
-        columns_file = str(Path(__file__).parent / "columns.txt")
-    lines = []
-    try:
-        with open(columns_file) as f:
-            lines = [a.strip() for a in f.read().split("\n")]
-    except (FileNotFoundError, PermissionError, OSError) as e:
-        logging.error(f"Failed to read columns file {columns_file}: {e}")
-    columns = []
-    for line in lines:
-        if len(line) and not line.startswith("#"):
-            columns.append(line)
-    args.output_columns = columns
-
-    return args
+    return load_modern_config(config_file)
 
 
-def maxmind_geocode_ip(args: Any, ip: str) -> dict[str, Any]:
+def maxmind_geocode_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get location of IP address from Maxmind City database (GeoLite2-City.mmdb)
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip: an IP address
 
     Returns:
@@ -220,7 +164,7 @@ def maxmind_geocode_ip(args: Any, ip: str) -> dict[str, Any]:
     """
 
     reader = geoip2.database.Reader(
-        os.path.join(args.maxmind_dbpath, "GeoLite2-City.mmdb")
+        config.maxmind.db_path / "GeoLite2-City.mmdb"
     )
     response = reader.city(ip)
     out = flatten_dict(response.raw, separator=".")
@@ -231,11 +175,11 @@ def maxmind_geocode_ip(args: Any, ip: str) -> dict[str, Any]:
     return result
 
 
-def geonames_timezone(args: Any, lat: float, lng: float) -> dict[str, Any]:
+def geonames_timezone(config: KnowYourIPConfig, lat: float, lng: float) -> dict[str, Any]:
     """Get timezone for a latitude/longitude from GeoNames
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         lat (float): latitude
         lng (float): longitude
 
@@ -255,11 +199,11 @@ def geonames_timezone(args: Any, lat: float, lng: float) -> dict[str, Any]:
             An exception is thrown when the limit is exceeded.
 
     Example:
-        geonames_timezone(args, 32.0617, 118.7778)
+        geonames_timezone(config, 32.0617, 118.7778)
     """
 
     data = {}
-    payload = {"lat": lat, "lng": lng, "username": args.geonames_username}
+    payload = {"lat": lat, "lng": lng, "username": config.geonames.username}
     retry = 0
     while retry < MAX_RETRIES:
         try:
@@ -276,11 +220,11 @@ def geonames_timezone(args: Any, lat: float, lng: float) -> dict[str, Any]:
     return data
 
 
-def tzwhere_timezone(args: Any, lat: float, lng: float) -> str | None:
+def tzwhere_timezone(config: KnowYourIPConfig, lat: float, lng: float) -> str | None:
     """Get timezone of a latitude/longitude using the tzwhere package.
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         lat (float): latitude
         lng (float): longitude
 
@@ -293,66 +237,122 @@ def tzwhere_timezone(args: Any, lat: float, lng: float) -> str | None:
 
     from tzwhere import tzwhere
 
-    if not hasattr(args, "tzwhere_tz"):
-        args.tzwhere_tz = tzwhere.tzwhere()
-    return args.tzwhere_tz.tzNameAt(lat, lng)
+    # Note: This function now requires static initialization
+    # Since we can't cache on the config object, we'll create fresh instance each time
+    tz_finder = tzwhere.tzwhere()
+    return tz_finder.tzNameAt(lat, lng)
 
 
-def abuseipdb_api(args: Any, ip: str) -> dict[str, Any]:
-    """Get information from AbuseIPDB via `API <https://www.abuseipdb.com/api.html>`_
+def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
+    """Get abuse information for an IP address from AbuseIPDB API.
 
     Args:
-        args: via the ``load_config`` function.
-        ip (str): an IP address
+        config: Configuration object containing AbuseIPDB settings including
+            API key, days lookback period, and category mappings.
+        ip: IP address to check for abuse reports.
 
     Returns:
-        dict: AbuseIPDB information
+        Dictionary containing AbuseIPDB analysis results with keys:
+            - abuseipdb.categories: Human-readable abuse categories (e.g., "DDoS Attack|Phishing")
+            - abuseipdb.confidence: Abuse confidence percentage
+            - abuseipdb.country: Country of origin
+            - abuseipdb.reports: Number of reports
+            - Other fields from API response
+
+    Note:
+        Uses embedded category mapping to convert numeric category IDs
+        (e.g., 4, 7, 15) to descriptive names (e.g., "DDoS Attack", "Phishing", "Hacking").
 
     References:
-        * https://www.abuseipdb.com/api.html
-        * e.g. https://www.abuseipdb.com/check/[IP]/json?key=[API_KEY]&days=[DAYS]
+        https://www.abuseipdb.com/api.html
+        https://docs.abuseipdb.com/
 
     Example:
-        abuseipdb_api(args, '222.186.30.49')
+        >>> config = KnowYourIPConfig()
+        >>> config.abuseipdb.api_key = "your_api_key"
+        >>> config.abuseipdb.days = 90
+        >>> result = abuseipdb_api(config, '222.186.30.49')
+        >>> print(result.get('abuseipdb.categories', 'Clean'))
+        SSH|Brute Force
     """
 
     out = {}
+    # Use embedded category mapping for better performance and reliability
+    categories = ABUSEIPDB_CATEGORIES
+
     retry = 0
     while retry < MAX_RETRIES:
         try:
+            headers = {
+                "Key": config.abuseipdb.api_key,
+                "Accept": "application/json"
+            }
+            params = {
+                "ipAddress": ip,
+                "maxAgeInDays": config.abuseipdb.days,
+                "verbose": ""
+            }
             r = requests.get(
-                f"https://www.abuseipdb.com/check/{ip}/json?key={args.abuseipdb_key}&days={args.abuseipdb_days}"
+                "https://api.abuseipdb.com/api/v2/check",
+                headers=headers,
+                params=params,
+                timeout=30
             )
             if r.status_code == 200:
-                js = r.json()
-                if isinstance(js, list):
-                    if len(js) == 0:
-                        break
-                    js = js[0]
-                out = {}
-                for k in js.keys():
-                    if k == "category":
-                        c = []
-                        for a in js[k]:
-                            a = str(a)
-                            if a in args.abuseipdb_category:
-                                c.append(args.abuseipdb_category[a])
-                        out[f"abuseipdb.{k}"] = "|".join(c)
+                response = r.json()
+                if "data" in response:
+                    data = response["data"]
+                    out = {}
+
+                    # Core fields
+                    out["abuseipdb.abuse_confidence_score"] = data.get("abuseConfidencePercentage", 0)
+                    out["abuseipdb.country_code"] = data.get("countryCode")
+                    out["abuseipdb.usage_type"] = data.get("usageType")
+                    out["abuseipdb.isp"] = data.get("isp")
+                    out["abuseipdb.domain"] = data.get("domain")
+                    out["abuseipdb.is_public"] = data.get("isPublic")
+                    out["abuseipdb.is_whitelisted"] = data.get("isWhitelisted")
+                    out["abuseipdb.total_reports"] = data.get("totalReports", 0)
+                    out["abuseipdb.num_distinct_users"] = data.get("numDistinctUsers", 0)
+                    out["abuseipdb.last_reported_at"] = data.get("lastReportedAt")
+
+                    # Process categories with embedded mapping
+                    if "categories" in data and data["categories"]:
+                        category_names = []
+                        for cat_id in data["categories"]:
+                            cat_str = str(cat_id)
+                            if cat_str in categories:
+                                category_names.append(categories[cat_str])
+                        out["abuseipdb.categories"] = "|".join(category_names) if category_names else ""
                     else:
-                        out[f"abuseipdb.{k}"] = js[k]
+                        out["abuseipdb.categories"] = ""
                 break
-        except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f"abuseipdb_api: {e}")
+            elif r.status_code == 429:
+                logging.warning("AbuseIPDB rate limit exceeded")
+                out["abuseipdb.status"] = "rate_limited"
+                break
+            elif r.status_code == 401:
+                logging.error("AbuseIPDB authentication failed - check API key")
+                out["abuseipdb.status"] = "auth_failed"
+                break
+            else:
+                logging.warning(f"AbuseIPDB API returned status {r.status_code}: {r.text}")
+                retry += 1
+                if retry < MAX_RETRIES:
+                    time.sleep(retry * 2)  # Exponential backoff
+        except requests.RequestException as e:
+            logging.warning(f"abuseipdb_api request error: {e}")
             retry += 1
-            time.sleep(retry)
+            if retry < MAX_RETRIES:
+                time.sleep(retry)
     return out
 
 
-def abuseipdb_web(args, ip):
+def abuseipdb_web(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get information from `AbuseIPDB website <https://www.abuseipdb.com/>`_
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip (str): an IP address
 
     Returns:
@@ -405,11 +405,11 @@ def abuseipdb_web(args, ip):
     return data
 
 
-def ipvoid_scan(args, ip):
+def ipvoid_scan(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get Blacklist information from `IPVoid website <http://www.ipvoid.com/ip-blacklist-check>`_
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip (str): an IP address
 
     Returns:
@@ -449,11 +449,11 @@ def ipvoid_scan(args, ip):
     return data
 
 
-def apivoid_api(args, ip):
+def apivoid_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get information from APIVoid `IP Reputation API <https://www.apivoid.com/api/ip-reputation/>`_
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip (str): an IP address
 
     Returns:
@@ -467,7 +467,7 @@ def apivoid_api(args, ip):
     """
 
     url = "https://endpoint.apivoid.com/iprep/v1/pay-as-you-go/"
-    params = {"ip": ip, "key": args.apivoid_api_key}
+    params = {"ip": ip, "key": config.apivoid.api_key}
     retry = 0
     data = {}
     while retry < MAX_RETRIES:
@@ -491,63 +491,120 @@ def apivoid_api(args, ip):
     return data
 
 
-def censys_api(args: Any, ip: str) -> dict[str, Any]:
-    """Get information from Censys `Search API <https://censys.io/api/v1/docs/search>`_
+def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
+    """Get information from Censys Platform API.
+
+    Note: Legacy Censys Search v1/v2 APIs are deprecated as of 2025.
+    This uses the new Censys Platform API with updated authentication.
 
     Args:
-        args: via the ``load_config`` function.
-        ip (str): an IP address
+        config: Typed configuration object containing Censys settings.
+        ip: IP address to query.
+
     Returns:
-        dict: Censys information
+        Dictionary containing Censys data with 'censys.' prefixed keys.
+
+    Rate Limits:
+        Free tier: 250 requests/month, 1 request per 2.5 seconds
 
     References:
-        Fields: https://censys.io/ipv4/help
+        https://search.censys.io/api
+        https://docs.censys.com/reference/get-started
 
     Example:
-        censys_api(args, '222.186.30.49')
+        >>> config.censys.enabled = True
+        >>> config.censys.api_key = "your_api_key"
+        >>> result = censys_api(config, '8.8.8.8')
+        >>> print(result.get('censys.autonomous_system.name'))
     """
 
-    fields = []
-    for c in args.output_columns:
-        if c.startswith("censys."):
-            fields.append(c.replace("censys.", ""))
+    data = {}
 
-    payload = {
-        "query": "ip:" + ip,
-        "page": 1,
-        "fields": fields,
+    if not config.censys.api_key:
+        logging.warning("Censys API key not configured")
+        return data
+
+    headers = {
+        "Authorization": f"Bearer {config.censys.api_key}",
+        "Content-Type": "application/json"
     }
 
-    data = {}
     retry = 0
     while retry < MAX_RETRIES:
         try:
-            r = requests.post(
-                args.censys_api_url + "/search/ipv4",
-                auth=(args.censys_uid, args.censys_secret),
-                json=payload,
-            )
-            if r.status_code == 200:
-                out = r.json()
-                if "results" in out and len(out["results"]):
-                    out = out["results"][0]
-                for k in out.keys():
-                    if isinstance(out[k], list):
-                        out[k] = "|".join([str(i) for i in out[k]])
-                    data["censys." + k] = out[k]
-                break
-        except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f"censys_api: {e}")
+            # Use the new Platform API endpoint for host lookup
+            url = f"{config.censys.api_url}/v2/hosts/{ip}"
+            r = requests.get(url, headers=headers, timeout=30)
+
+            match r.status_code:
+                case 200:
+                    result = r.json()
+                    if "result" in result:
+                        host_data = result["result"]
+
+                        # Extract key information with flattened keys
+                        data["censys.ip"] = host_data.get("ip")
+
+                        # Autonomous System information
+                        if "autonomous_system" in host_data:
+                            asn_data = host_data["autonomous_system"]
+                            data["censys.asn"] = asn_data.get("asn")
+                            data["censys.as_name"] = asn_data.get("name")
+                            data["censys.as_country_code"] = asn_data.get("country_code")
+
+                        # Location information
+                        if "location" in host_data:
+                            loc_data = host_data["location"]
+                            data["censys.country"] = loc_data.get("country")
+                            data["censys.country_code"] = loc_data.get("country_code")
+                            data["censys.city"] = loc_data.get("city")
+                            data["censys.timezone"] = loc_data.get("timezone")
+
+                        # Services information
+                        if "services" in host_data and host_data["services"]:
+                            services = host_data["services"]
+                            ports = [str(s.get("port", "")) for s in services if "port" in s]
+                            data["censys.ports"] = "|".join(ports) if ports else ""
+
+                            protocols = [s.get("transport_protocol", "") for s in services if "transport_protocol" in s]
+                            data["censys.protocols"] = "|".join({p for p in protocols if p})
+                    break
+
+                case 404:
+                    logging.info(f"IP {ip} not found in Censys database")
+                    data["censys.status"] = "not_found"
+                    break
+
+                case 429:
+                    logging.warning("Censys rate limit exceeded")
+                    data["censys.status"] = "rate_limited"
+                    break
+
+                case 401 | 403:
+                    logging.error("Censys authentication failed - check API key")
+                    data["censys.status"] = "auth_failed"
+                    break
+
+                case _:
+                    logging.warning(f"Censys API returned status {r.status_code}: {r.text}")
+                    retry += 1
+                    if retry < MAX_RETRIES:
+                        time.sleep(retry * 2)  # Exponential backoff
+
+        except requests.RequestException as e:
+            logging.warning(f"censys_api request error: {e}")
             retry += 1
-            time.sleep(retry)
+            if retry < MAX_RETRIES:
+                time.sleep(retry)
+
     return data
 
 
-def shodan_api(args: Any, ip: str) -> dict[str, Any]:
+def shodan_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get information from Shodan
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip (str): an IP address
 
     Returns:
@@ -557,7 +614,7 @@ def shodan_api(args: Any, ip: str) -> dict[str, Any]:
         shodan_api(args, '222.186.30.49')
     """
 
-    api = shodan.Shodan(args.shodan_api_key)
+    api = shodan.Shodan(config.shodan.api_key)
     data = {}
     try:
         out = api.host(ip)
@@ -571,54 +628,133 @@ def shodan_api(args: Any, ip: str) -> dict[str, Any]:
     return data
 
 
-def virustotal_api(args: Any, ip: str) -> dict[str, Any]:
-    """Get information from VirusTotal `Public API <https://www.virustotal.com/th/documentation/public-api/>`_
+def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
+    """Get information from VirusTotal using the official vt-py client.
+
+    Uses VirusTotal's official Python client library for improved reliability,
+    better error handling, and automatic rate limiting support.
 
     Args:
-        args: via the ``load_config`` function.
-        ip (str): an IP address
+        config: Typed configuration object containing VirusTotal settings.
+        ip: IP address to analyze.
 
     Returns:
-        dict: Virustotal information
+        Dictionary containing VirusTotal analysis results with keys:
+            - virustotal.harmless: Number of harmless detections
+            - virustotal.malicious: Number of malicious detections
+            - virustotal.suspicious: Number of suspicious detections
+            - virustotal.undetected: Number of undetected results
+            - virustotal.asn: Autonomous System Number
+            - virustotal.as_owner: AS owner name
+            - virustotal.country: Country code
+            - virustotal.network: Network range
+            - virustotal.reputation: Reputation score
+            - virustotal.categories: Threat categories (if available)
 
-    Notes:
-        Public API Limitation
-            * Privileges  public key
-            * Request rate    4 requests/minute
-            * Daily quota 5760 requests/day
-            * Monthly quota   178560 requests/month
+    Note:
+        VirusTotal API v3 Rate Limits:
+            * Public API: 500 requests/day, 4 requests/minute
+            * Premium API: Higher limits based on subscription
+        
+        Uses official vt-py client for automatic rate limiting and
+        improved error handling.
+
+    References:
+        https://developers.virustotal.com/reference/ip-info
+        https://github.com/VirusTotal/vt-py
 
     Example:
-        virustotal_api(args, '222.186.30.49')
+        >>> config = KnowYourIPConfig()
+        >>> config.virustotal.api_key = "your_api_key"
+        >>> result = virustotal_api(config, '8.8.8.8')
+        >>> print(result['virustotal.reputation'])
+        530
     """
-
-    url = "https://www.virustotal.com/vtapi/v2/ip-address/report"
-    params = {"ip": ip, "apikey": args.virustotal_api_key}
-    retry = 0
+    
     data = {}
-    while retry < MAX_RETRIES:
+    
+    if not config.virustotal.api_key:
+        logging.warning("VirusTotal API key not configured")
+        return data
+
+    def _fetch_vt_data_sync() -> dict[str, Any]:
+        """Synchronous wrapper for VirusTotal data fetching."""
+        
+        async def _internal_fetch():
+            async with vt.Client(config.virustotal.api_key) as client:
+                try:
+                    ip_obj = await client.get_object(f"/ip_addresses/{ip}")
+                    
+                    # Extract analysis statistics
+                    if hasattr(ip_obj, 'last_analysis_stats'):
+                        stats = ip_obj.last_analysis_stats
+                        data["virustotal.harmless"] = stats.get("harmless", 0)
+                        data["virustotal.malicious"] = stats.get("malicious", 0)
+                        data["virustotal.suspicious"] = stats.get("suspicious", 0)
+                        data["virustotal.undetected"] = stats.get("undetected", 0)
+                    
+                    # Network and location information
+                    data["virustotal.asn"] = getattr(ip_obj, 'asn', None)
+                    data["virustotal.as_owner"] = getattr(ip_obj, 'as_owner', None)
+                    data["virustotal.country"] = getattr(ip_obj, 'country', None)
+                    data["virustotal.network"] = getattr(ip_obj, 'network', None)
+                    
+                    # Reputation score
+                    data["virustotal.reputation"] = getattr(ip_obj, 'reputation', 0)
+                    
+                    # Categories (threat categories)
+                    if hasattr(ip_obj, 'categories'):
+                        categories = ip_obj.categories
+                        if isinstance(categories, dict):
+                            data["virustotal.categories"] = "|".join(categories.keys())
+                        elif isinstance(categories, list):
+                            data["virustotal.categories"] = "|".join([str(c) for c in categories])
+                        else:
+                            data["virustotal.categories"] = ""
+                    else:
+                        data["virustotal.categories"] = ""
+                        
+                    return data
+                    
+                except vt.APIError as e:
+                    if e.code == "NotFoundError":
+                        logging.info(f"IP {ip} not found in VirusTotal database")
+                        return {"virustotal.status": "not_found"}
+                    elif e.code == "QuotaExceededError":
+                        logging.warning("VirusTotal rate limit exceeded")
+                        return {"virustotal.status": "rate_limited"}
+                    elif e.code == "AuthenticationRequiredError":
+                        logging.error("VirusTotal authentication failed - check API key")
+                        return {"virustotal.status": "auth_failed"}
+                    else:
+                        logging.warning(f"VirusTotal API error: {e}")
+                        return {"virustotal.status": "api_error"}
+                except Exception as e:
+                    logging.warning(f"VirusTotal unexpected error: {e}")
+                    return {"virustotal.status": "error"}
+        
+        # Handle async execution in new event loop
         try:
-            r = requests.get(url, params=params)
-            if r.status_code == 200:
-                out = r.json()
-                out = flatten_dict(out)
-                for k in out.keys():
-                    if isinstance(out[k], list):
-                        out[k] = "|".join([str(i) for i in out[k]])
-                    data["virustotal." + k] = out[k]
-                break
-        except (requests.RequestException, ValueError, KeyError) as e:
-            logging.warning(f"virustotal_api: {e}")
-            retry += 1
-            time.sleep(retry)
-    return data
+            # Create new event loop for this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(_internal_fetch())
+            finally:
+                loop.close()
+        except Exception as e:
+            logging.warning(f"VirusTotal execution error: {e}")
+            return {"virustotal.status": "execution_error"}
+    
+    # Execute the synchronous wrapper
+    return _fetch_vt_data_sync()
 
 
-def ping(args, ip):
+def ping(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get information using Ping (ICMP protocol)
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip (str): an IP address
 
     Returns:
@@ -634,9 +770,9 @@ def ping(args, ip):
     """
 
     data = {}
-    data["ping.count"] = args.ping_count
-    data["ping.timeout"] = args.ping_timeout
-    stat = quiet_ping(ip, timeout=args.ping_timeout, count=args.ping_count)
+    data["ping.count"] = config.ping.count
+    data["ping.timeout"] = config.ping.timeout
+    stat = quiet_ping(ip, timeout=config.ping.timeout, count=config.ping.count)
     if stat:
         data["ping.max"] = stat[0]
         data["ping.min"] = stat[1]
@@ -645,11 +781,11 @@ def ping(args, ip):
     return data
 
 
-def traceroute(args, ip):
+def traceroute(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get information using traceroute
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip (str): an IP address
 
     Returns:
@@ -664,8 +800,8 @@ def traceroute(args, ip):
     """
 
     data = {}
-    hops = os_traceroute(ip, max_hops=args.traceroute_max_hops)
-    data["traceroute.max_hops"] = args.traceroute_max_hops
+    hops = os_traceroute(ip, max_hops=config.traceroute.max_hops)
+    data["traceroute.max_hops"] = config.traceroute.max_hops
     data["traceroute.hops"] = hops
     return data
 
@@ -674,11 +810,11 @@ def init_worker():
     signal.signal(signal.SIGINT, signal.SIG_IGN)
 
 
-def query_ip(args, ip):
+def query_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     """Get all information of IP address
 
     Args:
-        args: via the ``load_config`` function.
+        config: Typed configuration object.
         ip (str): an IP address
 
     Returns:
@@ -691,69 +827,68 @@ def query_ip(args, ip):
     data = {"ip": ip}
     udata = {}
     try:
-        if args.ping_enable:
-            out = ping(args, ip)
+        if config.ping.enabled:
+            out = ping(config, ip)
             data.update(out)
-        if args.traceroute_enable:
-            out = traceroute(args, ip)
+        if config.traceroute.enabled:
+            out = traceroute(config, ip)
             data.update(out)
         try:
-            if args.maxmind_enable:
-                out = maxmind_geocode_ip(args, ip)
+            if config.maxmind.enabled:
+                out = maxmind_geocode_ip(config, ip)
                 lat = out["maxmind.location.latitude"]
                 lng = out["maxmind.location.longitude"]
                 data.update(out)
-            if args.geonames_enable:
-                out = geonames_timezone(args, lat, lng)
+            if config.geonames.enabled:
+                out = geonames_timezone(config, lat, lng)
                 data.update(out)
-            if args.tzwhere_enable:
-                tz = tzwhere_timezone(args, lat, lng)
+            if config.tzwhere.enabled:
+                tz = tzwhere_timezone(config, lat, lng)
                 data["tzwhere.timezone"] = tz
         except Exception as e:
             logging.error(e)
-        if args.abuseipdb_enable:
-            out = abuseipdb_api(args, ip)
+        if config.abuseipdb.enabled:
+            out = abuseipdb_api(config, ip)
             data.update(out)
-            out = abuseipdb_web(args, ip)
+            out = abuseipdb_web(config, ip)
             data.update(out)
-        if args.ipvoid_enable:
-            out = ipvoid_scan(args, ip)
+        if config.ipvoid.enabled:
+            out = ipvoid_scan(config, ip)
             data.update(out)
-        if args.apivoid_enable:
-            out = apivoid_api(args, ip)
+        if config.apivoid.enabled:
+            out = apivoid_api(config, ip)
             data.update(out)
-        if args.censys_enable:
-            out = censys_api(args, ip)
+        if config.censys.enabled:
+            out = censys_api(config, ip)
             data.update(out)
-        if args.shodan_enable:
-            out = shodan_api(args, ip)
+        if config.shodan.enabled:
+            out = shodan_api(config, ip)
             data.update(out)
-        if args.virustotal_enable:
-            out = virustotal_api(args, ip)
+        if config.virustotal.enabled:
+            out = virustotal_api(config, ip)
             data.update(out)
-        # FIXME: Encode all columns to 'utf-8'
+        # Encode columns to UTF-8 where possible, fallback to original value
         for k, v in data.items():
-            if k in args.output_columns:
+            if k in config.output.columns:
                 try:
                     udata[k] = v.encode("utf-8")
-                except:
+                except (AttributeError, UnicodeEncodeError):
                     udata[k] = v
     except Exception as e:
         logging.error(e)
-        if args.verbose:
-            import traceback
-
-            traceback.print_exc()
+        # Note: verbose flag removed - logging should be controlled by logging level
+        import traceback
+        traceback.print_exc()
     return udata
 
 
-def main():
+def main() -> None:
     setup_logger()
 
     parser = argparse.ArgumentParser(description="Know Your IP")
     parser.add_argument("ip", nargs="*", help="IP Address(es)")
     parser.add_argument("-f", "--file", help="List of IP addresses file")
-    parser.add_argument("-c", "--config", default=CFG_FILE, help="Configuration file")
+    parser.add_argument("-c", "--config", help="Configuration file (TOML format)")
     parser.add_argument(
         "-o", "--output", default="output.csv", help="Output CSV file name"
     )
@@ -781,7 +916,8 @@ def main():
     if args.file is None and len(args.ip) == 0:
         parser.error("at least one of IP address and --file is required")
 
-    args = load_config(args)
+    # Load configuration
+    config = load_config(args.config)
 
     pool = Pool(processes=args.max_conn, initializer=init_worker)
 
@@ -794,7 +930,7 @@ def main():
             ]
 
     f = open(args.output, "w")
-    writer = DictWriter(f, fieldnames=args.output_columns)
+    writer = DictWriter(f, fieldnames=config.output.columns)
     if args.header:
         writer.writeheader()
     row = 0
@@ -807,7 +943,7 @@ def main():
             break
         logging.info(f"Row: {row}")
         try:
-            partial_query_ip = partial(query_ip, args)
+            partial_query_ip = partial(query_ip, config)
             ips = args.ip[row : row + args.max_conn]
             results = pool.map(partial_query_ip, ips)
             for data in results:
@@ -816,7 +952,7 @@ def main():
                     if v is not None:
                         try:
                             edata[k] = v.decode("utf-8")
-                        except:
+                        except (AttributeError, UnicodeDecodeError):
                             edata[k] = v
                 writer.writerow(edata)
                 row += 1

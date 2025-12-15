@@ -2,6 +2,25 @@
 
 from __future__ import annotations
 
+import array
+import logging
+import os
+import select
+import signal
+import socket
+import struct
+import sys
+import time
+from typing import Any
+
+try:
+    from _thread import get_ident
+except ImportError:
+
+    def get_ident():
+        return 0
+
+
 """
     A pure python ping implementation using raw sockets.
 
@@ -240,29 +259,9 @@ from __future__ import annotations
 """
 
 # =============================================================================#
-import array
-import os
-import select
-import signal
-import socket
-import struct
-import sys
-import time
 
-try:
-    from _thread import get_ident
-except ImportError:
-
-    def get_ident():
-        return 0
-
-
-if sys.platform == "win32":
-    # On Windows, the best timer is time.clock()
-    default_timer = time.clock
-else:
-    # On most other platforms the best timer is time.time()
-    default_timer = time.time
+# Use time.perf_counter() for high-resolution timing on all platforms (Python 3.3+)
+default_timer = time.perf_counter
 
 # =============================================================================#
 # ICMP parameters
@@ -291,7 +290,7 @@ myStats = MyStats  # NOT Used globally anymore.
 
 
 # =============================================================================#
-def checksum(source_string):
+def checksum(source_string: bytes) -> int:
     """
     A port of the functionality of in_cksum() from ping.c
     Ideally this would act on the string as a series of 16-bit ints (host
@@ -341,8 +340,8 @@ def do_one(
         # except socket.error
         except OSError as e:
             # etype, evalue, etb = sys.exc_info()
-            print("failed. (socket error: '%s')" % str(e))  # evalue.args[1])
-            print("Note that python-ping uses RAW socketsand requiers root rights.")
+            logging.error(f"failed. (socket error: '{e}')")  # evalue.args[1])
+            logging.error("Note that python-ping uses RAW socketsand requiers root rights.")
             raise  # raise the original error
     else:
         try:  # One could use UDP here, but it's obscure
@@ -353,15 +352,15 @@ def do_one(
         # except socket.error:
         except OSError as e:
             # etype, evalue, etb = sys.exc_info()
-            print("failed. (socket error: '%s')" % str(e))  # evalue.args[1])
-            print("Note that python-ping uses RAW socketsand requires root rights.")
+            logging.error(f"failed. (socket error: '{e}')")  # evalue.args[1])
+            logging.error("Note that python-ping uses RAW socketsand requires root rights.")
             raise  # raise the original error
 
     # my_ID = os.getpid() & 0xFFFF
     my_ID = (os.getpid() ^ get_ident()) & 0xFFFF
 
     sentTime = send_one_ping(mySocket, destIP, my_ID, mySeqNumber, numDataBytes, ipv6)
-    if sentTime == None:
+    if sentTime is None:
         mySocket.close()
         return delay
 
@@ -387,9 +386,8 @@ def do_one(
                     # Python on windows dosn't have inet_ntop.
                     host_addr = hostname
 
-            print(
-                "%d bytes from %s: icmp_seq=%d ttl=%d time=%d ms"
-                % (dataSize, host_addr, icmpSeqNumber, iphTTL, delay)
+            logging.info(
+                f"{dataSize} bytes from {host_addr}: icmp_seq={icmpSeqNumber} ttl={iphTTL} time={delay} ms"
             )
         myStats.pktsRcvd += 1
         myStats.totTime += delay
@@ -400,13 +398,13 @@ def do_one(
     else:
         delay = None
         if not quiet:
-            print("Request timed out.")
+            logging.warning("Request timed out.")
 
     return delay
 
 
 # =============================================================================#
-def send_one_ping(mySocket, destIP, myID, mySeqNumber, numDataBytes, ipv6=False):
+def send_one_ping(mySocket: socket.socket, destIP: str, myID: int, mySeqNumber: int, numDataBytes: int, ipv6: bool = False) -> float | None:
     """
     Send one ping to the given >destIP<.
     """
@@ -456,14 +454,14 @@ def send_one_ping(mySocket, destIP, myID, mySeqNumber, numDataBytes, ipv6=False)
     # except socket.error:
     except OSError as e:
         # etype, evalue, etb = sys.exc_info()
-        print("General failure (%s)" % str(e))  # (evalue.args[1]))
+        logging.error(f"General failure ({e})")  # (evalue.args[1]))
         return
 
     return sendTime
 
 
 # =============================================================================#
-def receive_one_ping(mySocket, myID, timeout, ipv6=False):
+def receive_one_ping(mySocket: socket.socket, myID: int, timeout: int, ipv6: bool = False) -> tuple[float | None, int, int, int, int]:
     """
     Receive the ping from the socket. Timeout = in ms
     """
@@ -516,37 +514,35 @@ def receive_one_ping(mySocket, myID, timeout, ipv6=False):
 
 
 # =============================================================================#
-def dump_stats(myStats):
+def dump_stats(myStats: MyStats) -> None:
     """
     Show stats when pings are done
     """
-    print("\n----%s PYTHON PING Statistics----" % (myStats.thisIP))
+    logging.info(f"\n----{myStats.thisIP} PYTHON PING Statistics----")
 
     if myStats.pktsSent > 0:
         myStats.fracLoss = (myStats.pktsSent - myStats.pktsRcvd) / myStats.pktsSent
 
-    print(
-        "%d packets transmitted, %d packets received, %0.1f%% packet loss"
-        % (myStats.pktsSent, myStats.pktsRcvd, 100.0 * myStats.fracLoss)
+    logging.info(
+        f"{myStats.pktsSent} packets transmitted, {myStats.pktsRcvd} packets received, {100.0 * myStats.fracLoss:.1f}% packet loss"
     )
 
     if myStats.pktsRcvd > 0:
-        print(
-            "round-trip (ms)  min/avg/max = %d/%0.1f/%d"
-            % (myStats.minTime, myStats.totTime / myStats.pktsRcvd, myStats.maxTime)
+        logging.info(
+            f"round-trip (ms)  min/avg/max = {myStats.minTime:.0f}/{myStats.totTime / myStats.pktsRcvd:.1f}/{myStats.maxTime:.0f}"
         )
 
-    print("")
+    logging.info("")
     return
 
 
 # =============================================================================#
-def signal_handler(signum, frame):
+def signal_handler(signum: int, frame: Any) -> None:
     """
     Handle exit via signals
     """
     dump_stats(myStats)
-    print("\n(Terminated with signal %d)\n" % (signum))
+    logging.warning(f"\n(Terminated with signal {signum})\n")
     sys.exit(0)
 
 
@@ -573,18 +569,17 @@ def verbose_ping(
             destIP = info[4][0]
         else:
             destIP = socket.gethostbyname(hostname)
-        print("\nPYTHON PING %s (%s): %d data bytes" % (hostname, destIP, numDataBytes))
+        logging.info(f"\nPYTHON PING {hostname} ({destIP}): {numDataBytes} data bytes")
     except socket.gaierror as e:
         # etype, evalue, etb = sys.exc_info()
-        print(
-            "\nPYTHON PING: Unknown host: %s (%s)" % (hostname, str(e))
+        logging.error(
+            f"\nPYTHON PING: Unknown host: {hostname} ({e})"
         )  # (hostname, evalue.args[1]))
-        print()
         return
 
     myStats.thisIP = destIP
 
-    for i in range(count):
+    for _i in range(count):
         delay = do_one(
             myStats, destIP, hostname, timeout, mySeqNumber, numDataBytes, ipv6=ipv6
         )
@@ -641,7 +636,7 @@ def quiet_ping(
         )
         time.sleep(0.5)
 
-    for i in range(count):
+    for _i in range(count):
         delay = do_one(
             myStats,
             destIP,
@@ -673,27 +668,28 @@ def quiet_ping(
 
 # =============================================================================#
 if __name__ == "__main__":
-    # FIXME: Add a real CLI
-    if len(sys.argv) == 1:
-        # These should work:
-        verbose_ping("8.8.8.8")
-        verbose_ping("heise.de")
-        verbose_ping("google.com")
+    # Simple CLI for testing purposes
+    match len(sys.argv):
+        case 1:
+            # These should work:
+            verbose_ping("8.8.8.8")
+            verbose_ping("heise.de")
+            verbose_ping("google.com")
 
-        # Inconsistent on Windows w/ ActivePython (Python 3.2 resolves correctly
-        # to the local host, but 2.7 tries to resolve to the local *gateway*)
-        verbose_ping("localhost")
+            # Inconsistent on Windows w/ ActivePython (Python 3.2 resolves correctly
+            # to the local host, but 2.7 tries to resolve to the local *gateway*)
+            verbose_ping("localhost")
 
-        # Should fail with 'getaddrinfo failed':
-        verbose_ping("foobar_url.foobar")
+            # Should fail with 'getaddrinfo failed':
+            verbose_ping("foobar_url.foobar")
 
-        # Should fail (timeout), but it depends on the local network:
-        verbose_ping("192.168.255.254")
+            # Should fail (timeout), but it depends on the local network:
+            verbose_ping("192.168.255.254")
 
-        # Should fails with 'The requested address is not valid in its context':
-        verbose_ping("0.0.0.0")
-    elif len(sys.argv) == 2:
-        retval = verbose_ping(sys.argv[1])
-        sys.exit(retval)
-    else:
-        print("Error: call ./ping.py hostname")
+            # Should fails with 'The requested address is not valid in its context':
+            verbose_ping("0.0.0.0")
+        case 2:
+            retval = verbose_ping(sys.argv[1])
+            sys.exit(retval)
+        case _:
+            logging.error("Error: call ./ping.py hostname")

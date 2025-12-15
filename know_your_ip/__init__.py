@@ -14,6 +14,7 @@ from importlib.metadata import version
 
 __version__ = version("know_your_ip")
 
+from .config import KnowYourIPConfig, load_config
 from .know_your_ip import (
     abuseipdb_api,
     abuseipdb_web,
@@ -21,7 +22,6 @@ from .know_your_ip import (
     censys_api,
     geonames_timezone,
     ipvoid_scan,
-    load_config,
     maxmind_geocode_ip,
     ping,
     query_ip,
@@ -32,6 +32,7 @@ from .know_your_ip import (
 )
 
 __all__ = [
+    "KnowYourIPConfig",
     "load_config",
     "maxmind_geocode_ip",
     "geonames_timezone",

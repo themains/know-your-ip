@@ -7,14 +7,13 @@ Know Your IP
     :target: http://know_your_ip.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
-Get data on IP addresses. Learn where they are located (lat/long,
-country, city, time zone), whether they are blacklisted or not (by
-`abuseipdb <http://http://www.abuseipdb.com>`__,
-`virustotal <http://www.virustotal.com>`__,
-`ipvoid <http://ipvoid.com/>`__, etc.) and for what (and when they were
-blacklisted), which ports are open, and what services are running (via
-`shodan <http://shodan.io>`__), and what you get when you ping or issue
-a traceroute. 
+Get comprehensive data on IP addresses. Learn where they are located (lat/long,
+country, city, time zone), whether they are flagged as malicious (by
+`AbuseIPDB <https://www.abuseipdb.com>`__,
+`VirusTotal <https://www.virustotal.com>`__,
+`IPVoid <https://ipvoid.com/>`__, etc.), which ports are open and what 
+services are running (via `Shodan <https://shodan.io>`__), and network 
+diagnostics (ping, traceroute). 
 
 If you are curious about potential application of the package, we have a
 :download:`presentation <../../presentation/kip.pdf>` on 
@@ -23,18 +22,43 @@ its use in cybersecurity analysis workflow.
 You can use the package in two different ways. You can call it from the shell, or you can
 use it as an external library. From the shell, you can run ``know_your_ip``. It takes a csv 
 with a single column of IP addresses (sample input file: :download:`input.csv <../../examples/input.csv>`), 
-details of the API keys to various services (in :download:`know_your_ip.cfg <../../know_your_ip/know_your_ip.cfg>`) 
-and which columns you would like from which service (in :download:`this example columns.txt <../../know_your_ip/columns.txt>`), 
+and a modern TOML configuration file with API keys and output settings, 
 and appends the requested results to the IP list (sample output file: :download:`output.csv <../../examples/output.csv>`). 
 This simple setup allows you to mix and match easily. 
 
-If you want to use it as an external library, the package also provides that. The function ``query_ip`` relies
-on the same config files as ``know_your_ip`` and takes an IP address. We illustrate its use below. You can 
+If you want to use it as an external library, the package also provides that. The function ``query_ip`` uses
+the modern Pydantic configuration system and takes an IP address. You can 
 also get data from specific services. For instance, if you only care about getting the MaxMind data, 
 use ``maxmind_geocode_ip``. If you would like data from the abuseipdb, call the ``abuseipdb_api`` function, etc. 
-These functions still rely on the global config and columns files. For examples of how to use the package, 
+These functions use the type-safe ``KnowYourIPConfig`` configuration object. For examples of how to use the package, 
 see :download:`example.py <../../examples/example.py>` or the jupyter notebook 
 `example.ipynb <https://github.com/themains/know-your-ip/blob/master/examples/example.ipynb>`__.
+
+What's New in v0.2.0
+----------------------
+
+The latest version brings significant modernization and improvements:
+
+**Modern Configuration System**
+- TOML configuration format with Pydantic v2 validation
+- Type-safe configuration with field validators  
+- Environment variable support (``KNOW_YOUR_IP_*`` prefix)
+- Embedded AbuseIPDB category mapping (no external CSV files)
+
+**API Upgrades**
+- VirusTotal API v3 with enhanced threat intelligence
+- Updated rate limits and improved error handling
+- Modern Python 3.11+ features (match/case syntax, union types)
+
+**Performance Improvements** 
+- Eliminated file I/O operations for category lookups
+- Self-contained category dictionary with all 23 AbuseIPDB categories
+- Faster startup and reduced dependencies
+
+**Developer Experience**
+- Google-style docstrings with comprehensive examples
+- Type hints throughout codebase
+- Improved error messages and validation
 
 Brief Primer on Functionality
 --------------------------------
@@ -94,15 +118,15 @@ lat/long and returns timezone.
 
    -  `censys.io <http://censys.io>`__: Performs ZMap and ZGrab scans of
       IPv4 address space. To use censys.io, you must first register.
-      Once you register and have the API key, put in
-      :download:`here <../../know_your_ip/know_your_ip.cfg>`. The function takes an IP and returns
+      Once you register and have the API key, configure it in your TOML file
+      or environment variables. The function takes an IP and returns
       asn, timezone, country etc. For a full list, see
       https://censys.io/ipv4/help.
 
    -  `shodan.io <http://shodan.io>`__: Scans devices connected to the
       Internet for services, open ports etc. You must register to use
       shodan.io. Querying costs money. Once you register and have the
-      API key, put in :download:`here <../../know_your_ip/know_your_ip.cfg>`. The script implements
+      API key, configure it in your TOML file or environment variables. The script implements
       two API calls: shodan/host/ip and shodan/scan. The function takes
       a list of IPs and returns
 
@@ -116,15 +140,14 @@ lat/long and returns timezone.
    -  `virustotal.com <http://virustotal.com>`__: A Google company that
       analyzes and tracks suspicious files, URLs, and IPs. You must
       register to use virustotal. Once you register and have the API
-      key, put in :download:`here <../../know_your_ip/know_your_ip.cfg>`. The function implements
-      retrieving IP address reports method.
+      key, configure it in your TOML file or environment variables. The function implements
+      the modern VirusTotal API v3 for retrieving IP address reports.
 
    -  `abuseipdb.com <http://abuseipdb.com>`__: Tracks reports on IPs.
       You must register to use the API. Once you register and have the
-      API key, put in :download:`here <../../know_your_ip/know_your_ip.cfg>`. There is a limit of
-      5k pings per month. The function that we implement here is a
-      mixture of API and scraping as the API doesn't return details of
-      the reports filed.
+      API key, configure it in your TOML file or environment variables. The API
+      provides comprehensive abuse data with embedded category mapping
+      for improved performance.
 
    -  `ipvoid.com <http://ipvoid.com>`__: Tracks information on IPs.
       There is no API. We scrape information about IPs including status
@@ -136,17 +159,17 @@ Query Limits
 +---------------+--------------------+-------------------------------------------------------------------------------------+
 | Service       | Query Limits       | More Info                                                                           |
 +===============+====================+=====================================================================================+
-| Censys.io     | 120/5 minutes      | `Censys Acct. <https://censys.io/account>`__                                        |
+| GeoNames      | 10K/day, 1K/hour   | `GeoNames Web Services <https://www.geonames.org/export/web-services.html>`__       |
 +---------------+--------------------+-------------------------------------------------------------------------------------+
-| Virustotal    | 4/minute           | `Virustotal API Doc. <https://www.virustotal.com/en/documentation/public-api/>`__   |
+| AbuseIPDB     | 1K/day             | `AbuseIPDB API <https://docs.abuseipdb.com/>`__                                     |
 +---------------+--------------------+-------------------------------------------------------------------------------------+
-| AbuseIPDB     | 2500/month         | `AbuseIPDB FAQ <http://www.abuseipdb.com/faq.html>`__                               |
+| VirusTotal    | 500/day, 4/min     | `VirusTotal API v3 <https://developers.virustotal.com/reference/ip-info>`__         |
 +---------------+--------------------+-------------------------------------------------------------------------------------+
-| IPVoid        | \-                 |                                                                                     |
+| Censys        | 250/month          | `Censys Search API <https://search.censys.io/api>`__                                |
 +---------------+--------------------+-------------------------------------------------------------------------------------+
-| Shodan        | \-                 |                                                                                     |
+| Shodan        | Paid plans only    | `Shodan Developer API <https://developer.shodan.io/pricing>`__                      |
 +---------------+--------------------+-------------------------------------------------------------------------------------+
-| \-----------  | \----------------  | \-----------                                                                        |
+| IPVoid        | Web scraping       | No API - scraping only                                                             |
 +---------------+--------------------+-------------------------------------------------------------------------------------+
 
 API
@@ -158,6 +181,8 @@ API
 
 Installation
 -----------------
+
+**Requirements**: Python 3.11+
 
 The script depends on some system libraries. Currently ``traceroute`` uses
 operating system command ``traceroute`` on Linux and ``tracert`` on
@@ -174,52 +199,92 @@ socket and you must have root (on Linux) or Admin (on Windows) privileges to run
     # On Ubuntu Linux (if traceroute command not installed)
     sudo apt-get install traceroute 
 
-Note: If you use anaconda on Windows, it is best to install Shapely via:
-
-::
-
-    conda install -c scitools shapely 
-
 Getting KYIP Ready For Use
 ----------------------------
 
-To use the software, you need to take care of three things. You need to fill out
-the API keys in the config file, have a copy of MaxMind db if you want to use MaxMind,
-and pick out the columns you want in the columns.txt file:
+To use the software, you need to configure API keys and optionally download MaxMind databases:
 
--  In the config file (default: ``know_your_ip.cfg``), the settings grouped by function.
--  For Maxmind API, the script expects a copy of the database to be in
-   the folder specify by ``dbpath`` in the config file. To download the
-   database, go `here <http://dev.maxmind.com/geoip/geoip2/geolite2/>`__
--  In the columns file (default: ``columns.txt``), there are the data
-   columns to be output by the script. We may have more than one columns
-   file but only one will be use by setting the ``columns`` variable in
-   ``output`` section.
+-  **Configuration**: Create a TOML configuration file (default: ``know_your_ip.toml``) with your API keys and settings
+-  **MaxMind Database**: For geolocation, download the GeoLite2-City database from
+   `MaxMind <https://dev.maxmind.com/geoip/geoip2/geolite2/>`__ and place it in the ``db_path`` directory
+-  **Output Columns**: Configure desired output columns in the TOML file's ``[output]`` section
+-  **Environment Variables**: Alternatively, use environment variables with the ``KNOW_YOUR_IP_*`` prefix
+-  **Python 3.11+**: Ensure you have Python 3.11 or higher installed
 
 Configuration File
 ------------------------
 
-Most of functions make calls to different public REST APIs and hence require an API key and/or username.
+Most functions make calls to different public REST APIs and hence require an API key and/or username.
 You can register to get the API keys at the following URLs:
 
-    * `GeoNames <http://www.geonames.org/login>`__
-    * `AbuseIPDB <https://www.abuseipdb.com/register>`__
-    * `Censys <https://censys.io/register>`__
-    * `Shodan <https://account.shodan.io/registe>`__
-    * `VirusTotal <https://www.virustotal.com/en/documentation/virustotal-community/>`__
+    * `GeoNames <https://www.geonames.org/login>`__ - Free: 10K requests/day, 1K requests/hour
+    * `AbuseIPDB <https://www.abuseipdb.com/register>`__ - Free tier: 1K requests/day
+    * `VirusTotal <https://www.virustotal.com/gui/join-us>`__ - Free tier: 500 requests/day, 4 requests/min
+    * `Censys <https://search.censys.io/register>`__ - Free tier: 250 requests/month, 1 req/2.5 sec
+    * `Shodan <https://account.shodan.io/register>`__ - Paid service starting at $69/month
 
-    .. include:: ../../know_your_ip/know_your_ip.cfg
-        :literal:
+**TOML Configuration File**
 
-    See :download:`this example know_your_ip.cfg <../../know_your_ip/know_your_ip.cfg>`
+Create a ``know_your_ip.toml`` file with your API keys and settings:
 
-    We can also select the data columns which will be outputted to the CSV file in the text file.
-    To take out that column from the output file, add ``#`` at the start of line in the text file ``columns.txt``.
+.. code-block:: toml
 
-    .. include:: ../../know_your_ip/columns.txt
-        :literal:
+    # Know Your IP Configuration
+    # See https://github.com/themains/know-your-ip for documentation
 
-    See :download:`this example columns.txt <../../know_your_ip/columns.txt>`
+    [maxmind]
+    enabled = true
+    db_path = "./db"
+
+    [geonames]
+    enabled = false
+    # username = "your_username_here"
+
+    [abuseipdb]
+    enabled = true
+    api_key = "your_api_key_here"
+    days = 90
+
+    [virustotal]
+    enabled = true
+    api_key = "your_api_key_here"
+
+    [shodan]
+    enabled = false
+    # api_key = "your_api_key_here"
+
+    [output]
+    columns = [
+        "ip",
+        "maxmind.country.names.en", 
+        "maxmind.location.time_zone",
+        "abuseipdb.categories",
+        "virustotal.reputation",
+        "virustotal.malicious"
+    ]
+
+**Environment Variables**
+
+You can also configure via environment variables:
+
+.. code-block:: bash
+
+    export KNOW_YOUR_IP_VIRUSTOTAL_API_KEY="your_key_here"
+    export KNOW_YOUR_IP_VIRUSTOTAL_ENABLED=true
+    export KNOW_YOUR_IP_ABUSEIPDB_API_KEY="your_key_here"
+    export KNOW_YOUR_IP_ABUSEIPDB_ENABLED=true
+
+**Programmatic Configuration**
+
+.. code-block:: python
+
+    from know_your_ip import KnowYourIPConfig
+
+    config = KnowYourIPConfig()
+    config.virustotal.enabled = True
+    config.virustotal.api_key = "your_api_key"
+    config.abuseipdb.enabled = True
+    config.abuseipdb.days = 30
 
 
 Using KYIP
@@ -270,14 +335,18 @@ As an External Library with Pandas DataFrame
 ::
 
     import pandas as pd
-    from know_your_ip import load_config, query_ip
+    from know_your_ip import KnowYourIPConfig, query_ip
 
+    # Load configuration
+    config = KnowYourIPConfig()
+    config.virustotal.enabled = True
+    config.virustotal.api_key = "your_api_key"
+    config.abuseipdb.enabled = True
+    config.abuseipdb.api_key = "your_api_key"
+
+    # Process DataFrame
     df = pd.read_csv('examples/input.csv', header=None)
-
-    args = load_config('know_your_ip/know_your_ip.cfg')
-
-    odf = df[0].apply(lambda c: pd.Series(query_ip(args, c)))
-
+    odf = df[0].apply(lambda ip: pd.Series(query_ip(config, ip)))
     odf.to_csv('output.csv', index=False)
 
 

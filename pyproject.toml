@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "know_your_ip"
 version = "0.2.0"
 description = "Get data on IP addresses"
-readme = "README.rst"
+readme = "README.md"
 license = "MIT"
 authors = [
     {name = "Suriyan Laohaprapanon", email = "suriyant@gmail.com"},
@@ -37,7 +37,9 @@ dependencies = [
     "shodan",
     "configparser",
     "numpy",
-    "requests"
+    "requests",
+    "pydantic>=2.0",
+    "vt-py>=0.18.0"
 ]
 
 [project.optional-dependencies]
@@ -74,12 +76,7 @@ know_your_ip = "know_your_ip.know_your_ip:main"
 [tool.setuptools]
 packages = ["know_your_ip"]
 
-[tool.setuptools.package-data]
-know_your_ip = [
-    "abuseipdb_cat_catid.csv",
-    "columns.txt",
-    "know_your_ip.cfg"
-]
+# No package data files needed - using embedded category mappings
 
 [tool.ruff]
 line-length = 88
