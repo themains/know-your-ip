@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import asyncio
 import logging
 import re
 import signal
@@ -20,7 +19,6 @@ import geoip2.database
 import geoip2.webservice
 import requests
 import shodan
-import vt
 from bs4 import BeautifulSoup
 
 from .config import KnowYourIPConfig
@@ -629,10 +627,7 @@ def shodan_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
 
 
 def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
-    """Get information from VirusTotal using the official vt-py client.
-
-    Uses VirusTotal's official Python client library for improved reliability,
-    better error handling, and automatic rate limiting support.
+    """Get information from VirusTotal API v3.
 
     Args:
         config: Typed configuration object containing VirusTotal settings.
@@ -655,13 +650,13 @@ def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         VirusTotal API v3 Rate Limits:
             * Public API: 500 requests/day, 4 requests/minute
             * Premium API: Higher limits based on subscription
-        
-        Uses official vt-py client for automatic rate limiting and
-        improved error handling.
+
+        Uses HTTP requests with improved error handling. Official vt-py client
+        dependency is available for future async improvements.
 
     References:
         https://developers.virustotal.com/reference/ip-info
-        https://github.com/VirusTotal/vt-py
+        https://docs.virustotal.com/reference/overview
 
     Example:
         >>> config = KnowYourIPConfig()
@@ -670,84 +665,81 @@ def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         >>> print(result['virustotal.reputation'])
         530
     """
-    
+
     data = {}
-    
+
     if not config.virustotal.api_key:
         logging.warning("VirusTotal API key not configured")
         return data
 
-    def _fetch_vt_data_sync() -> dict[str, Any]:
-        """Synchronous wrapper for VirusTotal data fetching."""
-        
-        async def _internal_fetch():
-            async with vt.Client(config.virustotal.api_key) as client:
-                try:
-                    ip_obj = await client.get_object(f"/ip_addresses/{ip}")
-                    
-                    # Extract analysis statistics
-                    if hasattr(ip_obj, 'last_analysis_stats'):
-                        stats = ip_obj.last_analysis_stats
-                        data["virustotal.harmless"] = stats.get("harmless", 0)
-                        data["virustotal.malicious"] = stats.get("malicious", 0)
-                        data["virustotal.suspicious"] = stats.get("suspicious", 0)
-                        data["virustotal.undetected"] = stats.get("undetected", 0)
-                    
-                    # Network and location information
-                    data["virustotal.asn"] = getattr(ip_obj, 'asn', None)
-                    data["virustotal.as_owner"] = getattr(ip_obj, 'as_owner', None)
-                    data["virustotal.country"] = getattr(ip_obj, 'country', None)
-                    data["virustotal.network"] = getattr(ip_obj, 'network', None)
-                    
-                    # Reputation score
-                    data["virustotal.reputation"] = getattr(ip_obj, 'reputation', 0)
-                    
-                    # Categories (threat categories)
-                    if hasattr(ip_obj, 'categories'):
-                        categories = ip_obj.categories
-                        if isinstance(categories, dict):
-                            data["virustotal.categories"] = "|".join(categories.keys())
-                        elif isinstance(categories, list):
-                            data["virustotal.categories"] = "|".join([str(c) for c in categories])
-                        else:
-                            data["virustotal.categories"] = ""
-                    else:
-                        data["virustotal.categories"] = ""
-                        
-                    return data
-                    
-                except vt.APIError as e:
-                    if e.code == "NotFoundError":
-                        logging.info(f"IP {ip} not found in VirusTotal database")
-                        return {"virustotal.status": "not_found"}
-                    elif e.code == "QuotaExceededError":
-                        logging.warning("VirusTotal rate limit exceeded")
-                        return {"virustotal.status": "rate_limited"}
-                    elif e.code == "AuthenticationRequiredError":
-                        logging.error("VirusTotal authentication failed - check API key")
-                        return {"virustotal.status": "auth_failed"}
-                    else:
-                        logging.warning(f"VirusTotal API error: {e}")
-                        return {"virustotal.status": "api_error"}
-                except Exception as e:
-                    logging.warning(f"VirusTotal unexpected error: {e}")
-                    return {"virustotal.status": "error"}
-        
-        # Handle async execution in new event loop
+    url = f"https://www.virustotal.com/api/v3/ip_addresses/{ip}"
+    headers = {"x-apikey": config.virustotal.api_key}
+    retry = 0
+
+    while retry < MAX_RETRIES:
         try:
-            # Create new event loop for this thread
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                return loop.run_until_complete(_internal_fetch())
-            finally:
-                loop.close()
-        except Exception as e:
-            logging.warning(f"VirusTotal execution error: {e}")
-            return {"virustotal.status": "execution_error"}
-    
-    # Execute the synchronous wrapper
-    return _fetch_vt_data_sync()
+            r = requests.get(url, headers=headers, timeout=30)
+            match r.status_code:
+                case 200:
+                    response_data = r.json()
+                    if "data" in response_data:
+                        # Extract key attributes from v3 API response
+                        attributes = response_data["data"].get("attributes", {})
+
+                        # Process reputation and detection info
+                        if "last_analysis_stats" in attributes:
+                            stats = attributes["last_analysis_stats"]
+                            data["virustotal.harmless"] = stats.get("harmless", 0)
+                            data["virustotal.malicious"] = stats.get("malicious", 0)
+                            data["virustotal.suspicious"] = stats.get("suspicious", 0)
+                            data["virustotal.undetected"] = stats.get("undetected", 0)
+
+                        # Network info
+                        data["virustotal.asn"] = attributes.get("asn")
+                        data["virustotal.as_owner"] = attributes.get("as_owner")
+                        data["virustotal.country"] = attributes.get("country")
+                        data["virustotal.network"] = attributes.get("network")
+
+                        # Reputation score
+                        data["virustotal.reputation"] = attributes.get("reputation", 0)
+
+                        # Categories (if available)
+                        if "categories" in attributes:
+                            categories = attributes["categories"]
+                            if isinstance(categories, dict):
+                                data["virustotal.categories"] = "|".join(categories.keys())
+                            elif isinstance(categories, list):
+                                data["virustotal.categories"] = "|".join([str(c) for c in categories])
+                    break
+                case 404:
+                    # IP not found in VirusTotal database
+                    logging.info(f"IP {ip} not found in VirusTotal database")
+                    data["virustotal.status"] = "not_found"
+                    break
+                case 429:
+                    # Rate limit exceeded
+                    logging.warning("VirusTotal rate limit exceeded")
+                    data["virustotal.status"] = "rate_limited"
+                    break
+                case 401 | 403:
+                    # Authentication error
+                    logging.error("VirusTotal authentication failed - check API key")
+                    data["virustotal.status"] = "auth_failed"
+                    break
+                case _:
+                    # Other HTTP errors
+                    logging.warning(f"VirusTotal API returned status {r.status_code}: {r.text}")
+                    retry += 1
+                    if retry < MAX_RETRIES:
+                        time.sleep(retry * 2)  # Exponential backoff
+
+        except requests.RequestException as e:
+            logging.warning(f"virustotal_api request error: {e}")
+            retry += 1
+            if retry < MAX_RETRIES:
+                time.sleep(retry)
+
+    return data
 
 
 def ping(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:

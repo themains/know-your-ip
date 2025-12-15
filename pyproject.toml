@@ -35,11 +35,8 @@ dependencies = [
     "BeautifulSoup4",
     "lxml",
     "shodan",
-    "configparser",
-    "numpy",
     "requests",
-    "pydantic>=2.0",
-    "vt-py>=0.18.0"
+    "pydantic>=2.0"
 ]
 
 [project.optional-dependencies]
@@ -129,3 +126,26 @@ ignore_missing_imports = true
 minversion = "6.0"
 addopts = "-ra -q --strict-markers"
 testpaths = ["tests"]
+
+[tool.deptry]
+# Exclude directories from scanning
+extend_exclude = [
+    ".tox",
+    ".mypy_cache", 
+    "build",
+    "dist",
+    "docs"
+]
+
+# Map package names to module names for correct detection
+package_module_name_map = { "BeautifulSoup4" = "bs4" }
+
+# Ignore optional dev dependencies that are used outside main code
+ignore_obsolete = []
+
+# Skip these dependency groups from checks
+skip_obsolete = [
+    "dev",
+    "test", 
+    "docs"
+]
