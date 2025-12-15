@@ -137,15 +137,11 @@ extend_exclude = [
     "docs"
 ]
 
-# Map package names to module names for correct detection
+# Map package names to module names for correct detection  
 package_module_name_map = { "BeautifulSoup4" = "bs4" }
 
-# Ignore optional dev dependencies that are used outside main code
-ignore_obsolete = []
+# Development dependency groups to ignore for unused dependency checks
+pep621_dev_dependency_groups = ["dev", "test", "docs"]
 
-# Skip these dependency groups from checks
-skip_obsolete = [
-    "dev",
-    "test", 
-    "docs"
-]
+# Ignore lxml - used indirectly by BeautifulSoup as XML parser
+per_rule_ignores = { "DEP002" = ["lxml"] }
