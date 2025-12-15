@@ -22,3 +22,4 @@ htmlcov/
 coverage.xml
 *.py,cover
 .github/.DS_Store
+know_your_ip.toml

@@ -54,7 +54,7 @@ print(result['virustotal.reputation'])  # 530
 
 ### TOML Configuration File
 
-Create `know_your_ip.toml`:
+Create `know_your_ip.toml` (see `examples/know_your_ip.toml` for full example):
 
 ```toml
 [maxmind]
