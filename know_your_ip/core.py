@@ -33,6 +33,9 @@ logger = logging.getLogger(__name__)
 RATE_LIMITS = {
     "virustotal": http.RateLimit(requests=4, per_seconds=60),
     "abuseipdb": http.RateLimit(requests=1000, per_seconds=86400),
+    # Censys: a conservative guess, not a published figure. The Platform API
+    # returns no rate-limit headers, and the free tier is metered as a monthly
+    # credit quota (100/month) rather than a request rate.
     "censys": http.RateLimit(requests=1, per_seconds=2.5),
     "geonames": http.RateLimit(requests=1000, per_seconds=3600),
     "apivoid": http.RateLimit(requests=10, per_seconds=60),
@@ -584,31 +587,110 @@ def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         return {"censys.error": result.error or f"HTTP {result.status_code}"}
 
     # The Platform API nests the host under result.resource.
-    resource = result.json().get("result", {}).get("resource", {})
-    asn_data = resource.get("autonomous_system") or {}
-    loc = resource.get("location") or {}
-    services = resource.get("services") or []
+    return _parse_censys(result.json().get("result", {}).get("resource", {}))
 
-    return {
+
+def _parse_censys(resource: dict[str, Any]) -> dict[str, Any]:
+    """Reduce a Censys host resource to a flat set of fields.
+
+    One host response is around 30 KB across seven top-level sections. This
+    keeps the parts that describe the address and deliberately drops the bulky
+    ones: ``dns.names`` alone runs to a hundred hostnames and ``dns.forward_dns``
+    to several thousand, either of which would swamp a CSV row. Counts are kept
+    instead.
+
+    Args:
+        resource: The ``result.resource`` object from a host response.
+
+    Returns:
+        Fields prefixed with ``censys.``.
+    """
+    asn = resource.get("autonomous_system") or {}
+    loc = resource.get("location") or {}
+    coords = loc.get("coordinates") or {}
+    services = resource.get("services") or []
+    whois = resource.get("whois") or {}
+    whois_net = whois.get("network") or {}
+    whois_org = whois.get("organization") or {}
+
+    data: dict[str, Any] = {
         "censys.ip": resource.get("ip"),
-        "censys.asn": asn_data.get("asn"),
-        "censys.as_name": asn_data.get("name"),
-        "censys.as_country_code": asn_data.get("country_code"),
+        # Autonomous system, including the announced prefix - routing data at
+        # no extra request.
+        "censys.asn": asn.get("asn"),
+        "censys.as_name": asn.get("name"),
+        "censys.as_description": asn.get("description"),
+        "censys.as_country_code": asn.get("country_code"),
+        "censys.bgp_prefix": asn.get("bgp_prefix"),
+        # A second, independent geolocation. Comparing it against MaxMind is
+        # what makes cross-source disagreement visible.
         "censys.country": loc.get("country"),
         "censys.country_code": loc.get("country_code"),
+        "censys.continent": loc.get("continent"),
         "censys.city": loc.get("city"),
+        "censys.province": loc.get("province"),
+        "censys.postal_code": loc.get("postal_code"),
         "censys.timezone": loc.get("timezone"),
-        "censys.ports": "|".join(str(s["port"]) for s in services if "port" in s),
-        "censys.protocols": "|".join(
-            sorted(
-                {
-                    s["transport_protocol"]
-                    for s in services
-                    if s.get("transport_protocol")
-                }
-            )
+        "censys.latitude": coords.get("latitude"),
+        "censys.longitude": coords.get("longitude"),
+        # Registry data, which cross-checks the rdap provider rather than
+        # duplicating it.
+        "censys.whois_handle": whois_net.get("handle"),
+        "censys.whois_name": whois_net.get("name"),
+        "censys.whois_cidrs": "|".join(whois_net.get("cidrs") or []),
+        "censys.whois_allocation_type": whois_net.get("allocation_type"),
+        "censys.whois_created": whois_net.get("created"),
+        "censys.whois_updated": whois_net.get("updated"),
+        "censys.whois_org_name": whois_org.get("name"),
+        "censys.whois_org_country": whois_org.get("country"),
+        "censys.whois_abuse_email": _first_contact_email(
+            whois_org.get("abuse_contacts")
         ),
+        "censys.service_count": resource.get("service_count"),
+        "censys.dns_name_count": len((resource.get("dns") or {}).get("names") or []),
     }
+
+    # Ports, and the two distinct protocol notions the API reports: the
+    # application protocol (DNS, HTTP) and the transport (tcp, udp, quic).
+    # Transport values are lowercase.
+    # Deduplicated and numerically sorted: a host commonly exposes the same
+    # port over more than one transport (443 over both TCP and QUIC), and a
+    # column reading "443|443" is noise. service_count keeps the raw total.
+    data["censys.ports"] = "|".join(
+        str(p)
+        for p in sorted({s["port"] for s in services if s.get("port") is not None})
+    )
+    data["censys.transport_protocols"] = "|".join(
+        sorted(
+            {s["transport_protocol"] for s in services if s.get("transport_protocol")}
+        )
+    )
+    data["censys.services"] = "|".join(
+        sorted({s["protocol"] for s in services if s.get("protocol")})
+    )
+
+    # When Censys last observed this host, which is the provenance stamp for
+    # everything in the services block.
+    scan_times = sorted(s["scan_time"] for s in services if s.get("scan_time"))
+    if scan_times:
+        data["censys.last_scan_time"] = scan_times[-1]
+
+    return data
+
+
+def _first_contact_email(contacts: list[dict[str, Any]] | None) -> str | None:
+    """Return the first email address from an RDAP-style contact list.
+
+    Args:
+        contacts: A ``whois.organization.*_contacts`` array, or None.
+
+    Returns:
+        The first email found, or None.
+    """
+    for contact in contacts or []:
+        if email := contact.get("email"):
+            return str(email)
+    return None
 
 
 def shodan_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:

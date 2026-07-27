@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Censys now captures the response it was already paying for. One host request
+  returns ~31 KB across seven sections and the parser kept eight fields; it now
+  keeps thirty, including:
+  - `bgp_prefix` - the announced prefix, i.e. routing data at no extra request.
+  - `latitude`/`longitude` and `province`/`postal_code`/`continent` - a second
+    independent geolocation, which is what makes cross-source disagreement
+    measurable without adding a provider.
+  - the `whois` block - network handle, CIDRs, allocation type, organization,
+    and abuse contact - cross-checking the `rdap` provider rather than
+    duplicating it.
+  - `last_scan_time` - when Censys actually observed the services, which is the
+    provenance stamp for that section.
+  Verified against the live Platform API; tests now replay a captured payload
+  rather than a hand-written approximation.
 - Two keyless providers, so the package is useful with **no API keys at all**:
   - `network` classifies an address offline (public, private, loopback,
     link-local, multicast, reserved, CGNAT) and resolves its PTR record.
@@ -49,6 +63,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   now complete in ~30s with no rate-limit errors.
 - Failed calls return a value (`<service>.error` or `<service>.status`) instead
   of an empty dict indistinguishable from "nothing found".
+
+### Changed
+
+- `censys.protocols` is split into `censys.transport_protocols` (`tcp`, `udp`,
+  `quic` - lowercase, as the API returns them) and `censys.services` (the
+  application protocol: `DNS`, `HTTP`). The old name held transport values
+  under a label that read like application protocol.
+- `censys.ports` is deduplicated and numerically sorted. A host commonly
+  exposes one port over several transports, so the previous output could read
+  `443|443`; `censys.service_count` keeps the raw total.
+- `censys.dns_name_count` replaces any attempt to expand `dns.names`, which
+  returns 100 hostnames per host and would add 100 columns to every CSV row.
+
+### Fixed
+
+- The Censys rate limit is documented as an unverified guess. It was carried
+  over from the legacy Search API; the Platform API publishes no rate-limit
+  headers and meters the free tier as a monthly credit quota instead.
 
 ### Changed
 
