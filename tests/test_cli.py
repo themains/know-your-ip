@@ -126,3 +126,63 @@ class TestMain:
 
         assert log.exists()
         assert log.read_text().strip()
+
+
+class TestProviderSelection:
+    def test_list_providers(self, capsys):
+        assert main(["--list-providers"]) == 0
+
+        out = capsys.readouterr().out
+        assert "virustotal" in out
+        assert "key required" in out
+
+    def test_explicit_providers_override_enabled_flags(self, isolated):
+        out = isolated / "out.csv"
+
+        assert main(["8.8.8.8", "--providers", "ping", "-o", str(out)]) == 0
+
+    def test_unknown_provider_is_rejected(self):
+        with pytest.raises(SystemExit):
+            main(["8.8.8.8", "--providers", "nosuchprovider"])
+
+    def test_malformed_as_of_is_rejected(self):
+        with pytest.raises(SystemExit):
+            main(["8.8.8.8", "--as-of", "march 2019"])
+
+    def test_as_of_skips_unsupported_providers(self, isolated, caplog):
+        """Rather than answering a historical question with current data."""
+        out = isolated / "out.csv"
+
+        main(["8.8.8.8", "--as-of", "2019-03-14", "-o", str(out)])
+
+        assert "historical support" in caplog.text
+
+
+class TestCacheFlag:
+    def test_cache_file_is_created_and_reused(self, isolated):
+        db = isolated / "obs.sqlite"
+        out = isolated / "out.csv"
+
+        main(["8.8.8.8", "--providers", "ping", "--cache", str(db), "-o", str(out)])
+
+        assert db.exists()
+
+    def test_max_age_accepted(self, isolated):
+        db = isolated / "obs.sqlite"
+        out = isolated / "out.csv"
+
+        code = main(
+            [
+                "8.8.8.8",
+                "--providers",
+                "ping",
+                "--cache",
+                str(db),
+                "--max-age",
+                "24",
+                "-o",
+                str(out),
+            ]
+        )
+
+        assert code == 0

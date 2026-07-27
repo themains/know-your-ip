@@ -10,6 +10,7 @@ import logging
 import re
 import sys
 from csv import DictWriter
+from datetime import date, timedelta
 from functools import partial
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
@@ -18,9 +19,11 @@ from typing import Any
 import maxminddb
 
 from . import http
+from .cache import Cache, config_fingerprint, default_cache_path
 from .config import KnowYourIPConfig
 from .config import load_config as load_modern_config
 from .ping import quiet_ping
+from .providers import REGISTRY, Provider, build_default_registry
 from .traceroute import os_traceroute
 
 logger = logging.getLogger(__name__)
@@ -767,18 +770,56 @@ def traceroute(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
     }
 
 
-def query_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
-    """Collect data on an IP address from every enabled service.
+def _provider_config_values(config: KnowYourIPConfig, section: str) -> dict[str, Any]:
+    """Extract the settings that affect a provider's answer.
 
-    Each service is isolated: a failure in one is logged and recorded under
-    ``<service>.error`` without preventing the others from running.
+    Secrets are excluded: they do not change the result, and the fingerprint is
+    written to disk.
+
+    Args:
+        config: Configuration object.
+        section: Attribute name of the provider's config section.
+
+    Returns:
+        A dict of the influencing settings.
+    """
+    model = getattr(config, section, None)
+    if model is None:
+        return {}
+    secret_fields = {"api_key", "username", "organization_id"}
+    return {
+        name: value
+        for name, value in model.model_dump().items()
+        if name not in secret_fields and name != "enabled"
+    }
+
+
+def query_ip(
+    config: KnowYourIPConfig,
+    ip: str,
+    *,
+    providers: list[str] | None = None,
+    as_of: date | None = None,
+    cache: Cache | None = None,
+    max_age: timedelta | None = None,
+) -> dict[str, Any]:
+    """Collect data on an IP address from every selected provider.
+
+    Each provider is isolated: a failure in one is recorded under
+    ``<provider>.error`` without preventing the others from running.
 
     Args:
         config: Configuration object.
         ip: An IP address.
+        providers: Provider names to run. Defaults to those enabled in
+            ``config``.
+        as_of: Ask what was true on this date. Providers without historical
+            support are skipped rather than answering with present-day data.
+        cache: Cache to read from and append to, if any.
+        max_age: How stale a cached observation may be before it is refetched.
 
     Returns:
-        Every field collected, keyed by ``<service>.<field>``. Use
+        Every field collected, keyed by ``<provider>.<field>``. Use
         :func:`select_columns` to restrict the result to a chosen subset.
 
     Example:
@@ -792,55 +833,94 @@ def query_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         return {"ip": ip, "error": str(e)}
 
     data: dict[str, Any] = {"ip": ip}
-    lat: float | None = None
-    lng: float | None = None
+    selected = REGISTRY.for_as_of(REGISTRY.selected(config, providers), as_of)
 
-    def run(name: str, fn, *args) -> None:
-        """Run one service, recording failures rather than raising."""
-        try:
-            data.update(fn(*args))
-        except Exception as e:  # one bad service must not stop the rest
-            logger.warning("%s(%s): %s", name, ip, e)
-            data[f"{name}.error"] = str(e)
+    # Coordinate-based providers need a geolocation first, so they run in a
+    # second pass once the geolocating providers have contributed.
+    coordinate_providers = [p for p in selected if p.needs_coordinates]
+    address_providers = [p for p in selected if not p.needs_coordinates]
 
-    if config.ping.enabled:
-        run("ping", ping, config, ip)
-    if config.traceroute.enabled:
-        run("traceroute", traceroute, config, ip)
+    for provider in address_providers:
+        _run_provider(provider, config, ip, data, as_of, cache, max_age, (ip,))
 
-    if config.maxmind.enabled:
-        run("maxmind", maxmind_geocode_ip, config, ip)
-        lat = data.get("maxmind.location.latitude")
-        lng = data.get("maxmind.location.longitude")
+    lat = data.get("maxmind.location.latitude")
+    lng = data.get("maxmind.location.longitude")
 
     if lat is not None and lng is not None:
-        if config.geonames.enabled:
-            run("geonames", geonames_timezone, config, lat, lng)
+        for provider in coordinate_providers:
+            _run_provider(provider, config, ip, data, as_of, cache, max_age, (lat, lng))
         if config.timezone.enabled:
             try:
                 data["timezone.name"] = timezone_at(config, lat, lng)
             except Exception as e:
                 logger.warning("timezone(%s): %s", ip, e)
                 data["timezone.error"] = str(e)
-    elif config.geonames.enabled or config.timezone.enabled:
+    elif coordinate_providers or config.timezone.enabled:
         logger.info(
-            "timezone lookup skipped for %s: no coordinates "
+            "coordinate lookups skipped for %s: no latitude/longitude "
             "(enable [maxmind] to supply them)",
             ip,
         )
 
-    if config.abuseipdb.enabled:
-        run("abuseipdb", abuseipdb_api, config, ip)
-    if config.apivoid.enabled:
-        run("apivoid", apivoid_api, config, ip)
-    if config.censys.enabled:
-        run("censys", censys_api, config, ip)
-    if config.shodan.enabled:
-        run("shodan", shodan_api, config, ip)
-    if config.virustotal.enabled:
-        run("virustotal", virustotal_api, config, ip)
-
     return data
+
+
+def _run_provider(
+    provider: Provider,
+    config: KnowYourIPConfig,
+    ip: str,
+    data: dict[str, Any],
+    as_of: date | None,
+    cache: Cache | None,
+    max_age: timedelta | None,
+    args: tuple[Any, ...],
+) -> None:
+    """Run one provider, serving from cache when possible.
+
+    Failures are recorded in ``data`` rather than raised, so one unhealthy
+    service cannot abort a batch.
+
+    Args:
+        provider: The provider to run.
+        config: Configuration object.
+        ip: The address being queried, used for cache keys and logging.
+        data: Result dict, updated in place.
+        as_of: Historical date, or None.
+        cache: Cache to consult and append to, if any.
+        max_age: Staleness tolerance for cached rows.
+        args: Positional arguments after ``config`` for the fetch call.
+    """
+    fingerprint = ""
+    if cache is not None:
+        fingerprint = config_fingerprint(
+            _provider_config_values(config, provider.section)
+        )
+        cached = cache.get(ip, provider.name, fingerprint, max_age)
+        if cached is not None:
+            data.update(cached)
+            data[f"{provider.name}.from_cache"] = True
+            return
+
+    try:
+        result = (
+            provider.fetch(config, *args, as_of=as_of)
+            if provider.supports_as_of
+            else provider.fetch(config, *args)
+        )
+    except Exception as e:  # one bad provider must not stop the rest
+        logger.warning("%s(%s): %s", provider.name, ip, e)
+        data[f"{provider.name}.error"] = str(e)
+        return
+
+    data.update(result)
+    if cache is not None:
+        cache.put(
+            ip,
+            provider.name,
+            fingerprint,
+            result,
+            as_of.isoformat() if as_of else None,
+        )
 
 
 def read_ip_file(path: Path) -> list[str]:
@@ -889,6 +969,33 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Write every collected field instead of [output] columns",
     )
+    parser.add_argument(
+        "--providers",
+        help="Comma-separated provider names to run, overriding [*] enabled flags",
+    )
+    parser.add_argument(
+        "--as-of",
+        help="Ask what was true on this date (YYYY-MM-DD). Providers without "
+        "historical support are skipped rather than answering with current data",
+    )
+    parser.add_argument(
+        "--cache",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help="Cache results in SQLite; omit PATH for the default location",
+    )
+    parser.add_argument(
+        "--max-age",
+        type=int,
+        metavar="HOURS",
+        help="Refetch cached entries older than this many hours",
+    )
+    parser.add_argument(
+        "--list-providers",
+        action="store_true",
+        help="List registered providers and exit",
+    )
     parser.add_argument("--log-file", help="Also write logs to this file")
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose mode")
     parser.add_argument(
@@ -902,10 +1009,37 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     setup_logger(args.verbose, Path(args.log_file) if args.log_file else None)
 
+    if args.list_providers:
+        for provider in REGISTRY.providers:
+            key = "key required" if provider.requires_key else "no key"
+            history = "as-of" if provider.supports_as_of else "current only"
+            # Program output, not logging: it belongs on stdout so it can be
+            # piped, and must not be suppressed by the log level.
+            sys.stdout.write(
+                f"{provider.name:<12} {provider.cost:<9} {key:<13} {history}\n"
+            )
+        return 0
+
     if args.file is None and not args.ip:
         parser.error("at least one IP address or --file is required")
 
     config = load_config(args.config)
+
+    provider_names = (
+        [n.strip() for n in args.providers.split(",")] if args.providers else None
+    )
+    if provider_names:
+        try:
+            REGISTRY.selected(config, provider_names)
+        except KeyError as exc:
+            parser.error(str(exc))
+
+    as_of = None
+    if args.as_of:
+        try:
+            as_of = date.fromisoformat(args.as_of)
+        except ValueError:
+            parser.error(f"--as-of must be YYYY-MM-DD, got {args.as_of!r}")
 
     raw_ips = list(args.ip)
     if args.file:
@@ -933,6 +1067,41 @@ def main(argv: list[str] | None = None) -> int:
 
     logger.info("Processing %d address(es)", len(ips))
 
+    cache = None
+    if args.cache is not None:
+        cache_path = Path(args.cache) if args.cache else default_cache_path()
+        cache = Cache(cache_path)
+        logger.info("Caching results in %s", cache_path)
+
+    max_age = timedelta(hours=args.max_age) if args.max_age is not None else None
+    query = partial(
+        query_ip,
+        config,
+        providers=provider_names,
+        as_of=as_of,
+        cache=cache,
+        max_age=max_age,
+    )
+
+    try:
+        return _write_results(args, ips, query)
+    finally:
+        if cache is not None:
+            cache.close()
+
+
+def _write_results(args: argparse.Namespace, ips: list[str], query: Any) -> int:
+    """Run the query over every address and write the CSV.
+
+    Args:
+        args: Parsed command line arguments.
+        ips: Validated addresses to process.
+        query: Callable taking an address and returning a record.
+
+    Returns:
+        Process exit status.
+    """
+    config = load_config(args.config)
     with open(args.output, "w", newline="", encoding="utf-8") as fh:
         writer: DictWriter | None = None
         if not args.all_columns:
@@ -944,9 +1113,7 @@ def main(argv: list[str] | None = None) -> int:
 
         with ThreadPool(processes=args.max_conn) as pool:
             try:
-                for i, record in enumerate(
-                    pool.imap(partial(query_ip, config), ips), start=1
-                ):
+                for i, record in enumerate(pool.imap(query, ips), start=1):
                     if writer is None:
                         writer = DictWriter(
                             fh, fieldnames=list(record), extrasaction="ignore"
@@ -969,3 +1136,7 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+# Registration happens at import so the registry is populated for any caller.
+build_default_registry()
