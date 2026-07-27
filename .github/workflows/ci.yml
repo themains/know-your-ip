@@ -20,3 +20,9 @@ jobs:
     with:
       wheel-import: know_your_ip
       coverage-floor: 80
+      # This package shells out to ping and traceroute and writes CSV, all of
+      # which differ per platform: the macOS -W flag is milliseconds while
+      # Linux's is seconds, and CSV needs newline="" on Windows. Both bugs
+      # shipped unnoticed under a Linux-only matrix.
+      os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+      python-versions: '["3.11", "3.14"]' 
