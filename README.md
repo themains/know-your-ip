@@ -4,260 +4,210 @@
 [![CI](https://github.com/themains/know-your-ip/workflows/CI/badge.svg)](https://github.com/themains/know-your-ip/actions)
 [![Downloads](https://static.pepy.tech/badge/know-your-ip)](https://pepy.tech/project/know-your-ip)
 
-Get comprehensive data on IP addresses. Learn where they are located (lat/long, country, city, time zone), whether they are flagged as malicious (by [AbuseIPDB](https://www.abuseipdb.com), [VirusTotal](https://www.virustotal.com), [IPVoid](https://ipvoid.com/), etc.), which ports are open and what services are running (via [Shodan](https://shodan.io)), and network diagnostics (ping, traceroute).
+Get data on IP addresses: where they are located, whether they have been
+reported for abuse, what services they expose, and how the network reaches
+them. Point it at a CSV of addresses and get a CSV back.
 
-## 🚀 What's New in v0.2.0
+## Install
 
-- **Modern Configuration**: TOML-based config with Pydantic validation
-- **VirusTotal API v3**: Latest API with enhanced threat intelligence
-- **Embedded Categories**: Self-contained AbuseIPDB category mapping
-- **Python 3.11+ Features**: Match/case syntax, union types, type safety
-- **Performance Boost**: No file I/O for category lookups
-- **Environment Variables**: Configuration via `KNOW_YOUR_IP_*` variables
-
-## Quick Start
-
-### Installation
-
-**Requirements**: Python 3.11+
+**Requires Python 3.11+.**
 
 ```bash
 pip install know_your_ip
 ```
 
-### Basic Usage
+The base install is small and has no API-key requirement. Optional services
+come as extras:
 
-#### Command Line
 ```bash
-# Analyze single IP
-know_your_ip 8.8.8.8
-
-# Analyze from file
-know_your_ip --file input.csv --config config.toml
+pip install 'know_your_ip[shodan]'    # Shodan client
+pip install 'know_your_ip[timezone]'  # offline timezone lookup
+pip install 'know_your_ip[pandas]'    # DataFrame helpers in the examples
 ```
 
-#### Python Library
+## Quick start
+
+### Command line
+
+```bash
+# One or more addresses
+know_your_ip 8.8.8.8 1.1.1.1
+
+# From a file, 10 at a time
+know_your_ip --file input.csv --config know_your_ip.toml -n 10 -o out.csv
+
+# Every field collected, not just the [output] columns
+know_your_ip 8.8.8.8 --all-columns
+```
+
+Invalid addresses are reported and skipped rather than aborting the run.
+
+### Library
+
 ```python
 from know_your_ip import KnowYourIPConfig, query_ip
 
-# Load configuration
 config = KnowYourIPConfig()
 config.virustotal.enabled = True
 config.virustotal.api_key = "your_api_key"
 
-# Analyze IP
 result = query_ip(config, "8.8.8.8")
-print(result['virustotal.reputation'])  # 530
+print(result["virustotal.reputation"])
+```
+
+`query_ip` returns **every** field it collected. The `[output]` column list
+only controls what the command line writes to CSV. To apply it yourself:
+
+```python
+from know_your_ip import select_columns
+
+select_columns(result, config.output.columns)
 ```
 
 ## Configuration
 
-### TOML Configuration File
+Configuration is TOML. See [`examples/know_your_ip.toml`](https://github.com/themains/know-your-ip/blob/master/examples/know_your_ip.toml)
+for a complete file; generate a fresh one with:
 
-Create `know_your_ip.toml` (see `examples/know_your_ip.toml` for full example):
+```python
+from pathlib import Path
+from know_your_ip import create_default_config
+
+create_default_config(Path("know_your_ip.toml"))
+```
+
+Files are looked for at `./know_your_ip.toml`, then
+`~/.config/know-your-ip/config.toml`, then `~/.know-your-ip.toml`.
 
 ```toml
 [maxmind]
 enabled = true
-db_path = "./db"
+db_path = "./db"      # relative paths resolve against the working directory
 
 [abuseipdb]
 enabled = true
 api_key = "your_api_key_here"
-days = 90
+days = 180            # lookback window; API maximum is 365
 
 [virustotal]
 enabled = true
 api_key = "your_api_key_here"
 
 [output]
-columns = [
-    "ip",
-    "maxmind.country.names.en",
-    "virustotal.reputation",
-    "abuseipdb.categories"
-]
+columns = ["ip", "maxmind.country.names.en", "virustotal.reputation"]
 ```
 
-### Environment Variables
+Unknown keys and sections are rejected rather than silently ignored, so a typo
+fails loudly.
+
+### Environment variables
+
+Any setting can be supplied as `KNOW_YOUR_IP_<SECTION>_<FIELD>`. These override
+the configuration file.
 
 ```bash
 export KNOW_YOUR_IP_VIRUSTOTAL_API_KEY="your_key"
 export KNOW_YOUR_IP_VIRUSTOTAL_ENABLED=true
-export KNOW_YOUR_IP_ABUSEIPDB_API_KEY="your_key"
 ```
 
-### Programmatic Configuration
+Unrecognized `KNOW_YOUR_IP_*` variables produce a warning.
 
-```python
-from know_your_ip import KnowYourIPConfig
+## Services
 
-config = KnowYourIPConfig()
-config.virustotal.api_key = "your_api_key"
-config.abuseipdb.enabled = True
-config.abuseipdb.days = 30
-```
+| Service | Provides | Access |
+|---|---|---|
+| **MaxMind GeoLite2** | Country, city, lat/long, timezone | Free database; account + license key required to download |
+| **VirusTotal** | Reputation, per-engine analysis counts, ASN, JARM | Free tier: 500/day, 4/min |
+| **AbuseIPDB** | Abuse confidence, report categories, ISP, usage type | Free tier: 1,000 checks/day |
+| **Censys** | Open ports, protocols, ASN, location | Free tier: 100 credits/month |
+| **Shodan** | Open ports, services, vulnerabilities | Paid; free keys cannot do IP lookups |
+| **APIVoid** | Proxy/VPN/Tor flags, blocklist detections | Paid; 30-day trial only |
+| **GeoNames** | Timezone from coordinates | Free tier: 10,000/day, 1,000/hour |
+| **Ping / traceroute** | Latency, packet loss, network path | System commands, no privileges needed |
 
-## Supported Services
+Registration: [VirusTotal](https://www.virustotal.com/gui/join-us) ·
+[AbuseIPDB](https://www.abuseipdb.com/register) ·
+[Censys](https://platform.censys.io/) ·
+[Shodan](https://account.shodan.io/register) ·
+[GeoNames](https://www.geonames.org/login) ·
+[MaxMind](https://www.maxmind.com/en/geolite2/signup)
 
-| Service | Features | API Required |
-|---------|----------|--------------|
-| **MaxMind** | Geolocation, ASN, ISP | Free database |
-| **VirusTotal** | Threat reputation, categories | ✅ Free/Paid |
-| **AbuseIPDB** | Abuse reports, categories | ✅ Free/Paid |
-| **Shodan** | Open ports, services | ✅ Paid |
-| **Censys** | Internet scanning data | ✅ Free/Paid |
-| **IPVoid** | Blacklist status | Web scraping |
-| **GeoNames** | Timezone data | ✅ Free |
-| **Ping/Traceroute** | Network diagnostics | System tools |
+### MaxMind database
 
-### API Registration Links
+Anonymous GeoLite2 downloads ended in 2019. Create a free MaxMind account, get
+a license key, download `GeoLite2-City.mmdb`, and point `db_path` at the
+directory containing it.
 
-- [VirusTotal](https://www.virustotal.com/gui/join-us) - 500 requests/day, 4/min free
-- [AbuseIPDB](https://www.abuseipdb.com/register) - 1,000 requests/day free
-- [Shodan](https://account.shodan.io/register) - Paid service ($69+/month)
-- [Censys](https://search.censys.io/register) - 250 requests/month free
-- [GeoNames](https://www.geonames.org/login) - 10,000 requests/day, 1,000/hour free
-
-## Advanced Features
-
-### Pandas Integration
+## Working with pandas
 
 ```python
 import pandas as pd
 from know_your_ip import load_config, query_ip
 
-# Load IPs from CSV
-df = pd.read_csv('ips.csv')
-
-# Load configuration
 config = load_config()
-
-# Analyze all IPs
-results = df['ip'].apply(lambda ip: pd.Series(query_ip(config, ip)))
-results.to_csv('analysis.csv', index=False)
+df = pd.read_csv("ips.csv")
+results = pd.DataFrame(query_ip(config, ip) for ip in df["ip"])
+results.to_csv("enriched.csv", index=False)
 ```
 
-### Custom Analysis
-
-```python
-from know_your_ip import maxmind_geocode_ip, virustotal_api
-
-# Get only geolocation
-location = maxmind_geocode_ip(config, "8.8.8.8")
-print(f"Country: {location['maxmind.country.names.en']}")
-
-# Get only threat intelligence
-threat_data = virustotal_api(config, "8.8.8.8")
-print(f"Malicious detections: {threat_data['virustotal.malicious']}")
-```
-
-### Batch Processing
-
-```bash
-# Process large files with concurrency
-know_your_ip --file large_ips.csv --max-conn 10 --config config.toml
-
-# Process specific range
-know_your_ip --file ips.csv --from 100 --to 200
-```
-
-## API Reference
-
-### Core Functions
-
-- `query_ip(config, ip)` - Complete IP analysis
-- `load_config(path)` - Load configuration from file
-- `maxmind_geocode_ip(config, ip)` - Geolocation data
-- `virustotal_api(config, ip)` - VirusTotal threat intel
-- `abuseipdb_api(config, ip)` - Abuse reports
-- `shodan_api(config, ip)` - Port/service data
-- `ping(config, ip)` - Network latency
-- `traceroute(config, ip)` - Network path
-
-### Configuration Classes
-
-- `KnowYourIPConfig` - Main configuration
-- `MaxMindConfig` - Geolocation settings
-- `VirusTotalConfig` - Threat intel settings
-- `AbuseIPDBConfig` - Abuse data settings
-- `OutputConfig` - Output column configuration
-
-## Command Line Reference
+## Command line reference
 
 ```
 usage: know_your_ip [-h] [-f FILE] [-c CONFIG] [-o OUTPUT] [-n MAX_CONN]
-                    [--from FROM_ROW] [--to TO] [-v] [--no-header]
-                    [ip [ip ...]]
-
-Know Your IP - Comprehensive IP Address Analysis
+                    [--from FROM_ROW] [--to TO] [--all-columns]
+                    [--log-file LOG_FILE] [-v] [--no-header]
+                    [ip ...]
 
 positional arguments:
-  ip                    IP Address(es) to analyze
+  ip                    IP address(es) to analyze
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -f FILE, --file FILE  List of IP addresses file
-  -c CONFIG, --config CONFIG
-                        Configuration file (TOML format)
-  -o OUTPUT, --output OUTPUT
-                        Output CSV file name
-  -n MAX_CONN, --max-conn MAX_CONN
-                        Max concurrent connections
-  --from FROM_ROW       From row number
-  --to TO               To row number
+options:
+  -f, --file FILE       File listing IP addresses
+  -c, --config CONFIG   Configuration file (TOML)
+  -o, --output OUTPUT   Output CSV file
+  -n, --max-conn N      Max concurrent requests
+  --from FROM_ROW       From row
+  --to TO               To row (0 means all)
+  --all-columns         Write every collected field
+  --log-file LOG_FILE   Also write logs to this file
   -v, --verbose         Verbose mode
-  --no-header           Output without header
+  --no-header           Omit the CSV header row
 ```
 
-## Rate Limits
+## Requirements
 
-| Service | Free Tier | Paid Tier |
-|---------|-----------|-----------|
-| VirusTotal | 500/day, 4/min | Higher limits |
-| AbuseIPDB | 1,000/day | 10,000+/day |
-| Censys | 250/month, 1 req/2.5s | Higher limits |
-| GeoNames | 10,000/day, 1,000/hour | Commercial plans |
-| Shodan | No free API | $69+/month |
+- Python 3.11+
+- `traceroute` (Unix) or `tracert` (Windows) for the traceroute feature
+- Ping and traceroute use system commands and need no special privileges
+
+Runs on Linux, macOS, and Windows.
 
 ## Examples
 
-See the [`examples/`](examples/) directory for:
-- [example.py](examples/example.py) - Basic usage examples
-- [example.ipynb](examples/example.ipynb) - Jupyter notebook tutorial
-- [input.csv](examples/input.csv) - Sample input file
-- [output.csv](examples/output.csv) - Sample output
-
-## System Requirements
-
-### Dependencies
-- Python 3.11+
-- System `traceroute` command (Linux) or `tracert` (Windows)
-- Raw socket access for ping (requires admin/root privileges)
-
-### Platform Support
-- ✅ Linux
-- ✅ macOS
-- ✅ Windows
-- ✅ Docker/containers
+- [example.py](https://github.com/themains/know-your-ip/blob/master/examples/example.py) — each service, then all of them
+- [example.ipynb](https://github.com/themains/know-your-ip/blob/master/examples/example.ipynb) — notebook walkthrough
+- [know_your_ip.toml](https://github.com/themains/know-your-ip/blob/master/examples/know_your_ip.toml) — full configuration
+- [input.csv](https://github.com/themains/know-your-ip/blob/master/examples/input.csv) / [output.csv](https://github.com/themains/know-your-ip/blob/master/examples/output.csv)
 
 ## Documentation
 
-For comprehensive documentation, visit: [https://themains.github.io/know-your-ip/](https://themains.github.io/know-your-ip/)
+<https://themains.github.io/know-your-ip/>
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) and [Code of Conduct](https://contributor-covenant.org/version/1/0/0/).
-
-## License
-
-Released under the [MIT License](https://opensource.org/licenses/MIT).
+See [CONTRIBUTING.md](https://github.com/themains/know-your-ip/blob/master/CONTRIBUTING.md). Contributors are expected to follow the
+[Contributor Code of Conduct](https://contributor-covenant.org/version/1/0/0/).
 
 ## Authors
 
-- [Suriyan Laohaprapanon](https://github.com/soodoku)
+- [Suriyan Laohaprapanon](https://github.com/suriyan)
 - [Gaurav Sood](https://github.com/soodoku)
+
+## License
+
+[MIT](https://opensource.org/licenses/MIT).
 
 ---
 
-**Security Note**: This tool is designed for legitimate security analysis, threat intelligence, and network diagnostics. Please use responsibly and in accordance with applicable laws and service terms of use.
+**Note**: Intended for legitimate security analysis, threat intelligence, and
+network research. Respect each service's terms of use and rate limits.

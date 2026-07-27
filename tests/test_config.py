@@ -1,4 +1,6 @@
-"""Tests for configuration loading."""
+"""Tests for configuration models and loading."""
+
+from __future__ import annotations
 
 import os
 import tempfile
@@ -14,63 +16,80 @@ from know_your_ip.config import (
     create_default_config,
     find_config_file,
     load_from_env,
+    render_default_config,
 )
 
 
+@pytest.fixture
+def clean_env(monkeypatch):
+    """Remove any KNOW_YOUR_IP_* variables inherited from the environment."""
+    for key in list(os.environ):
+        if key.startswith("KNOW_YOUR_IP_"):
+            monkeypatch.delenv(key, raising=False)
+
+
 class TestConfigModels:
-    """Test the configuration model classes."""
+    """Configuration model behavior."""
 
-    def test_maxmind_config_defaults(self):
-        """Test MaxMind configuration defaults."""
-        config = MaxMindConfig()
-        assert config.enabled is True
-        assert config.db_path == Path("./db")
+    def test_maxmind_default_path_is_resolved(self):
+        """The default and an explicit './db' must resolve identically.
 
-    def test_maxmind_config_path_resolution(self):
-        """Test path resolution for MaxMind database."""
-        config = MaxMindConfig(db_path="./test")
-        assert isinstance(config.db_path, Path)
-        assert config.db_path.is_absolute()
+        Previously the validator ran only on explicit values, so the default
+        stayed relative while a configured './db' became absolute - and it
+        resolved against the installed package directory, not the cwd.
+        """
+        assert MaxMindConfig().db_path == MaxMindConfig(db_path=Path("./db")).db_path
 
-    def test_abuseipdb_config_defaults(self):
-        """Test AbuseIPDB configuration defaults."""
+    def test_relative_path_resolves_against_cwd(self):
+        assert MaxMindConfig(db_path=Path("./db")).db_path == Path.cwd() / "db"
+
+    def test_abuseipdb_defaults(self):
         config = AbuseIPDBConfig()
+
         assert config.enabled is False
         assert config.api_key is None
         assert config.days == 180
 
-    def test_abuseipdb_config_placeholder_api_key(self):
-        """Test placeholder API key handling."""
-        config = AbuseIPDBConfig(api_key="<<<YOUR_API_KEY_HERE>>>")
-        assert config.api_key is None  # Should be converted to None
+    def test_abuseipdb_days_bounded_to_api_maximum(self):
+        """The AbuseIPDB API rejects maxAgeInDays above 365."""
+        with pytest.raises(ValueError):
+            AbuseIPDBConfig(days=400)
 
-    def test_abuseipdb_config_valid_api_key(self):
-        """Test valid API key handling."""
-        config = AbuseIPDBConfig(api_key="valid_key_123")
-        assert config.api_key == "valid_key_123"
+    def test_placeholder_api_key_becomes_none(self):
+        assert AbuseIPDBConfig(api_key="<<<YOUR_API_KEY_HERE>>>").api_key is None
+
+    def test_real_api_key_preserved(self):
+        assert AbuseIPDBConfig(api_key="valid_key_123").api_key == "valid_key_123"
+
+    def test_unknown_key_is_rejected(self):
+        """Silently ignoring unknown keys hid a stale Censys uid/secret block
+        in the shipped example configuration."""
+        with pytest.raises(ValueError):
+            AbuseIPDBConfig(api_kye="typo")  # type: ignore[call-arg]
+
+    def test_timezone_disabled_by_default(self):
+        """timezonefinder is a large optional dependency."""
+        assert KnowYourIPConfig().timezone.enabled is False
 
 
 class TestLoadConfig:
-    """Test the load_config function."""
+    """Loading configuration from files."""
 
-    def test_load_default_config(self):
-        """Test loading default configuration."""
+    def test_defaults_when_no_file(self, clean_env, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
         config = load_config()
+
         assert isinstance(config, KnowYourIPConfig)
-        assert hasattr(config, "maxmind")
-        assert hasattr(config, "output")
-        assert isinstance(config.output.columns, list)
-        assert len(config.output.columns) > 0
         assert config.maxmind.enabled is True
         assert config.geonames.enabled is False
+        assert config.output.columns
 
-    def test_load_nonexistent_config(self):
-        """Test loading non-existent configuration file."""
-        config = load_config(Path("/nonexistent/config.toml"))
-        assert isinstance(config, KnowYourIPConfig)
+    def test_nonexistent_file_falls_back_to_defaults(self):
+        assert isinstance(
+            load_config(Path("/nonexistent/config.toml")), KnowYourIPConfig
+        )
 
-    def test_load_config_from_toml_file(self):
-        """Test loading configuration from TOML file."""
+    def test_loads_toml(self, clean_env):
         toml_content = """
 [maxmind]
 enabled = false
@@ -85,16 +104,12 @@ username = "test_user"
             config_file.write_text(toml_content)
 
             config = load_config(config_file)
-            assert config.maxmind.enabled is False
-            # Cross-platform path check
-            assert "custom" in str(config.maxmind.db_path) and "path" in str(
-                config.maxmind.db_path
-            )
-            assert config.geonames.enabled is True
-            assert config.geonames.username == "test_user"
 
-    def test_load_config_invalid_toml(self):
-        """Test loading invalid TOML file raises error."""
+        assert config.maxmind.enabled is False
+        assert config.maxmind.db_path == Path("/custom/path")
+        assert config.geonames.username == "test_user"
+
+    def test_invalid_toml_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             config_file = Path(tmpdir) / "invalid.toml"
             config_file.write_text("invalid toml content [[[")
@@ -102,84 +117,105 @@ username = "test_user"
             with pytest.raises(ConfigurationError, match="Failed to load config file"):
                 load_config(config_file)
 
+    def test_unknown_section_raises(self, clean_env):
+        """A typo'd section name should fail loudly rather than be ignored."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_file = Path(tmpdir) / "config.toml"
+            config_file.write_text("[ipvoid]\nenabled = true\n")
+
+            with pytest.raises(ConfigurationError, match="validation failed"):
+                load_config(config_file)
+
 
 class TestEnvironmentConfig:
-    """Test environment variable configuration loading."""
+    """Environment variable overrides."""
 
-    def test_load_from_env_empty(self):
-        """Test loading from environment when no variables are set."""
-        # Save current environment
-        original_env = dict(os.environ)
+    def test_empty_when_unset(self, clean_env):
+        assert load_from_env() == {}
 
-        try:
-            # Clear any KNOW_YOUR_IP variables
-            for key in list(os.environ.keys()):
-                if key.startswith("KNOW_YOUR_IP_"):
-                    del os.environ[key]
+    def test_reads_values(self, clean_env, monkeypatch):
+        monkeypatch.setenv("KNOW_YOUR_IP_MAXMIND_ENABLED", "false")
+        monkeypatch.setenv("KNOW_YOUR_IP_GEONAMES_USERNAME", "test_user")
+        monkeypatch.setenv("KNOW_YOUR_IP_ABUSEIPDB_DAYS", "30")
 
-            config = load_from_env()
-            assert config == {}
-        finally:
-            # Restore environment
-            os.environ.clear()
-            os.environ.update(original_env)
+        config = load_from_env()
 
-    def test_load_from_env_with_variables(self):
-        """Test loading from environment variables."""
-        original_env = dict(os.environ)
+        assert config["maxmind"]["enabled"] is False
+        assert config["geonames"]["username"] == "test_user"
+        assert config["abuseipdb"]["days"] == 30
 
-        try:
-            # Set test environment variables
-            os.environ["KNOW_YOUR_IP_MAXMIND_ENABLED"] = "false"
-            os.environ["KNOW_YOUR_IP_GEONAMES_USERNAME"] = "test_user"
-            os.environ["KNOW_YOUR_IP_ABUSEIPDB_DAYS"] = "30"
+    def test_multi_word_field_names(self, clean_env, monkeypatch):
+        """Splitting on the first underscore mangles fields like API_KEY."""
+        monkeypatch.setenv("KNOW_YOUR_IP_VIRUSTOTAL_API_KEY", "secret")
+        monkeypatch.setenv("KNOW_YOUR_IP_MAXMIND_DB_PATH", "/tmp/db")
 
-            config = load_from_env()
+        config = load_from_env()
 
-            assert config["maxmind"]["enabled"] is False
-            assert config["geonames"]["username"] == "test_user"
-            assert config["abuseipdb"]["days"] == 30
-        finally:
-            os.environ.clear()
-            os.environ.update(original_env)
+        assert config["virustotal"]["api_key"] == "secret"
+        assert config["maxmind"]["db_path"] == "/tmp/db"
 
-    def test_environment_variable_type_conversion(self):
-        """Test type conversion for environment variables."""
-        original_env = dict(os.environ)
+    def test_unknown_variable_ignored_with_warning(
+        self, clean_env, monkeypatch, caplog
+    ):
+        """Unrecognized variables used to vanish silently."""
+        monkeypatch.setenv("KNOW_YOUR_IP_NOSUCHSECTION_FIELD", "x")
 
-        try:
-            os.environ["KNOW_YOUR_IP_PING_ENABLED"] = "true"
-            os.environ["KNOW_YOUR_IP_PING_TIMEOUT"] = "5000"
-            os.environ["KNOW_YOUR_IP_GEONAMES_ENABLED"] = "false"
+        assert load_from_env() == {}
+        assert "unrecognized" in caplog.text.lower()
 
-            config = load_from_env()
+    def test_unknown_field_ignored_with_warning(self, clean_env, monkeypatch, caplog):
+        monkeypatch.setenv("KNOW_YOUR_IP_VIRUSTOTAL_NOSUCHFIELD", "x")
 
-            assert config["ping"]["enabled"] is True
-            assert config["ping"]["timeout"] == 5000
-            assert config["geonames"]["enabled"] is False
-        finally:
-            os.environ.clear()
-            os.environ.update(original_env)
+        assert load_from_env() == {}
+        assert "not a field" in caplog.text
+
+    def test_env_overrides_file(self, clean_env, monkeypatch):
+        monkeypatch.setenv("KNOW_YOUR_IP_GEONAMES_USERNAME", "from_env")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config_file = Path(tmpdir) / "config.toml"
+            config_file.write_text('[geonames]\nusername = "from_file"\n')
+
+            assert load_config(config_file).geonames.username == "from_env"
 
 
 class TestConfigUtils:
-    """Test configuration utility functions."""
+    """Configuration file discovery and generation."""
 
-    def test_find_config_file_none_exists(self):
-        """Test finding config file when none exists."""
-        # This should return None since no config file exists in test environment
-        result = find_config_file()
-        # Could be None or a valid path if config exists
-        assert result is None or isinstance(result, Path)
+    def test_find_config_file_returns_none_in_empty_dir(self, monkeypatch, tmp_path):
+        """Previously asserted 'None or Path', which cannot fail."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("HOME", str(tmp_path))
 
-    def test_create_default_config(self):
-        """Test creating default configuration file."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            config_path = Path(tmpdir) / "test_config.toml"
-            create_default_config(config_path)
+        assert find_config_file() is None
 
-            assert config_path.exists()
-            content = config_path.read_text()
-            assert "[maxmind]" in content
-            assert "[geonames]" in content
-            assert "enabled = true" in content
+    def test_find_config_file_finds_cwd_file(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        expected = tmp_path / "know_your_ip.toml"
+        expected.write_text("")
+
+        assert find_config_file() == expected
+
+    def test_create_default_config(self, tmp_path):
+        config_path = tmp_path / "test_config.toml"
+        create_default_config(config_path)
+
+        content = config_path.read_text()
+
+        assert "[maxmind]" in content
+        assert "[geonames]" in content
+
+    def test_generated_config_is_valid_and_matches_defaults(self, clean_env, tmp_path):
+        """The generated file is rendered from the models, so it cannot drift
+        from them the way the previous hardcoded string had."""
+        config_path = tmp_path / "generated.toml"
+        create_default_config(config_path)
+
+        loaded = load_config(config_path)
+
+        assert loaded.output.columns == KnowYourIPConfig().output.columns
+
+    def test_generated_config_has_no_removed_sections(self):
+        rendered = render_default_config()
+
+        assert "[ipvoid]" not in rendered
+        assert "[tzwhere]" not in rendered

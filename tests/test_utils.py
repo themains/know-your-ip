@@ -1,6 +1,6 @@
 """Tests for utility functions."""
 
-from know_your_ip.know_your_ip import clean_colname, flatten_dict
+from know_your_ip.core import clean_colname, flatten_dict
 
 
 class TestCleanColname:

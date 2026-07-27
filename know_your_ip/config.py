@@ -1,395 +1,213 @@
-"""Modern configuration system using Pydantic for validation and type safety."""
+"""Configuration models and loading for know_your_ip."""
 
 from __future__ import annotations
 
+import logging
 import os
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
-
-class MaxMindConfig(BaseModel):
-    """MaxMind GeoIP configuration."""
-
-    enabled: bool = True
-    db_path: Path = Path("./db")
-
-    @field_validator("db_path", mode="before")
-    @classmethod
-    def resolve_db_path(cls, v: str | Path) -> Path:
-        """Resolve relative paths to absolute paths."""
-        path = Path(v)
-        if not path.is_absolute():
-            # If relative, make it relative to package directory
-            package_dir = Path(__file__).parent
-            path = package_dir / path
-        return path
+logger = logging.getLogger(__name__)
 
 
-class GeoNamesConfig(BaseModel):
-    """GeoNames.org configuration."""
-
-    enabled: bool = False
-    username: str | None = None
-
-    @field_validator("username")
-    @classmethod
-    def validate_username(cls, v: str | None) -> str | None:
-        """Validate that username is provided if enabled."""
-        if v and v.startswith("<<<"):
-            return None  # Placeholder value
-        return v
+class ConfigurationError(Exception):
+    """Raised when configuration cannot be loaded or fails validation."""
 
 
-class AbuseIPDBConfig(BaseModel):
-    """AbuseIPDB configuration."""
+def _blank_placeholder(v: str | None) -> str | None:
+    """Treat an unedited template placeholder as an unset value.
 
-    enabled: bool = False
-    api_key: str | None = None
-    days: int = 180
+    Args:
+        v: A configured secret, or None.
 
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v: str | None) -> str | None:
-        """Validate that API key is provided if enabled."""
-        if v and v.startswith("<<<"):
-            return None  # Placeholder value
-        return v
+    Returns:
+        None if ``v`` is a ``<<<...>>>`` placeholder, otherwise ``v``.
+    """
+    if isinstance(v, str) and v.startswith("<<<"):
+        return None
+    return v
 
 
-class PingConfig(BaseModel):
-    """Ping configuration."""
-
-    enabled: bool = False
-    timeout: int = 3000
-    count: int = 3
+# A secret that may be left as a `<<<PLACEHOLDER>>>` in a generated config.
+Secret = Annotated[str | None, BeforeValidator(_blank_placeholder)]
 
 
-class TracerouteConfig(BaseModel):
-    """Traceroute configuration."""
+class _Section(BaseModel):
+    """Base for configuration sections; rejects unknown keys."""
 
-    enabled: bool = False
-    max_hops: int = 30
-
-
-class TzwhereConfig(BaseModel):
-    """tzwhere configuration."""
-
-    enabled: bool = True
+    model_config = ConfigDict(extra="forbid")
 
 
-class IPVoidConfig(BaseModel):
-    """IPVoid configuration."""
+def _resolve_path(v: str | Path) -> Path:
+    """Resolve a possibly-relative path against the current working directory.
 
-    enabled: bool = True
+    Args:
+        v: A path from configuration.
 
-
-class APIVoidConfig(BaseModel):
-    """APIVoid configuration."""
-
-    enabled: bool = False
-    api_key: str | None = None
-
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v: str | None) -> str | None:
-        """Validate that API key is provided if enabled."""
-        if v and v.startswith("<<<"):
-            return None  # Placeholder value
-        return v
+    Returns:
+        An absolute path.
+    """
+    return Path(v).expanduser().resolve()
 
 
-class CensysConfig(BaseModel):
-    """Censys Platform API configuration.
+class MaxMindConfig(_Section):
+    """MaxMind GeoLite2 configuration.
 
-    Note: Legacy Censys Search v1/v2 APIs are deprecated as of 2025.
-    This uses the new Censys Platform API.
+    Note:
+        Relative ``db_path`` values resolve against the current working
+        directory. Anonymous GeoLite2 downloads ended in 2019; a MaxMind
+        account and license key are required to obtain the database.
     """
 
-    enabled: bool = False
-    api_url: str = "https://search.censys.io/api"
-    api_key: str | None = None
-
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v: str | None) -> str | None:
-        """Validate that API key is provided if enabled."""
-        if v and v.startswith("<<<"):
-            return None  # Placeholder value
-        return v
-
-
-class ShodanConfig(BaseModel):
-    """Shodan configuration."""
-
-    enabled: bool = False
-    api_key: str | None = None
-
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v: str | None) -> str | None:
-        """Validate that API key is provided if enabled."""
-        if v and v.startswith("<<<"):
-            return None  # Placeholder value
-        return v
-
-
-class VirusTotalConfig(BaseModel):
-    """VirusTotal configuration."""
-
-    enabled: bool = False
-    api_key: str | None = None
-
-    @field_validator("api_key")
-    @classmethod
-    def validate_api_key(cls, v: str | None) -> str | None:
-        """Validate that API key is provided if enabled."""
-        if v and v.startswith("<<<"):
-            return None  # Placeholder value
-        return v
-
-
-class OutputConfig(BaseModel):
-    """Output configuration."""
-
-    columns: list[str] = Field(
-        default=[
-            "ip",
-            "maxmind.continent.names.en",
-            "maxmind.country.names.en",
-            "maxmind.location.time_zone",
-            "maxmind.postal.code",
-            "maxmind.registered_country.names.en",
-            "tzwhere.timezone",
-            "abuseipdb.bad_isp",
-            "abuseipdb.categories",
-            "ipvoid.blacklist_status",
-            "ipvoid.reverse_dns",
-            "apivoid.anonymity.is_hosting",
-            "apivoid.anonymity.is_proxy",
-            "apivoid.anonymity.is_tor",
-            "apivoid.anonymity.is_vpn",
-            "apivoid.anonymity.is_webproxy",
-            "apivoid.blacklists.detection_rate",
-            "apivoid.blacklists.detections",
-            "apivoid.blacklists.engines_count",
-            "apivoid.blacklists.scantime",
-            "apivoid.information.city_name",
-            "apivoid.information.continent_code",
-            "apivoid.information.continent_name",
-            "apivoid.information.country_calling_code",
-            "apivoid.information.country_code",
-            "apivoid.information.country_currency",
-            "apivoid.information.country_name",
-            "apivoid.information.isp",
-            "apivoid.information.latitude",
-            "apivoid.information.longitude",
-            "apivoid.information.region_name",
-            "apivoid.information.reverse_dns",
-            "shodan.asn",
-            "shodan.isp",
-            "shodan.vulns",
-            "shodan.os",
-            "shodan.ports",
-        ]
+    enabled: bool = True
+    # validate_default so the default and an explicitly configured "./db"
+    # resolve identically; previously only the latter was made absolute.
+    db_path: Annotated[Path, BeforeValidator(_resolve_path)] = Field(
+        default=Path("./db"), validate_default=True
     )
 
 
-class KnowYourIPConfig(BaseModel):
-    """Main configuration for Know Your IP."""
+class GeoNamesConfig(_Section):
+    """GeoNames.org configuration.
 
-    maxmind: MaxMindConfig = MaxMindConfig()
-    geonames: GeoNamesConfig = GeoNamesConfig()
-    abuseipdb: AbuseIPDBConfig = AbuseIPDBConfig()
-    ping: PingConfig = PingConfig()
-    traceroute: TracerouteConfig = TracerouteConfig()
-    tzwhere: TzwhereConfig = TzwhereConfig()
-    ipvoid: IPVoidConfig = IPVoidConfig()
-    apivoid: APIVoidConfig = APIVoidConfig()
-    censys: CensysConfig = CensysConfig()
-    shodan: ShodanConfig = ShodanConfig()
-    virustotal: VirusTotalConfig = VirusTotalConfig()
-    output: OutputConfig = OutputConfig()
-
-
-def load_from_env() -> dict[str, Any]:
-    """Load configuration from environment variables.
-
-    Environment variables should follow the pattern:
-    KNOW_YOUR_IP_<SECTION>_<KEY>=value
-
-    Examples:
-        KNOW_YOUR_IP_MAXMIND_ENABLED=true
-        KNOW_YOUR_IP_GEONAMES_USERNAME=myusername
-        KNOW_YOUR_IP_ABUSEIPDB_API_KEY=myapikey
+    Note:
+        Free tier is 10,000 credits/day and 1,000/hour. The account must
+        separately enable the free web service.
     """
-    config = {}
-    prefix = "KNOW_YOUR_IP_"
 
-    for key, value in os.environ.items():
-        if not key.startswith(prefix):
-            continue
-
-        # Remove prefix and split into section and field
-        config_key = key[len(prefix) :].lower()
-        parts = config_key.split("_", 1)
-
-        if len(parts) != 2:
-            continue
-
-        section, field = parts
-
-        # Convert string values to appropriate types
-        match value.lower():
-            case "true" | "1" | "yes" | "on":
-                value = True
-            case "false" | "0" | "no" | "off":
-                value = False
-            case _ if value.isdigit():
-                value = int(value)
-
-        # Create nested dict structure
-        if section not in config:
-            config[section] = {}
-        config[section][field] = value
-
-    return config
+    enabled: bool = False
+    username: Secret = None
 
 
-def find_config_file() -> Path | None:
-    """Find configuration file in standard locations.
+class AbuseIPDBConfig(_Section):
+    """AbuseIPDB configuration.
 
-    Search order:
-    1. ./know_your_ip.toml (current directory)
-    2. ~/.config/know-your-ip/config.toml (XDG config)
-    3. ~/.know-your-ip.toml (home directory)
+    Note:
+        ``days`` is the report lookback window; the API maximum is 365.
     """
-    candidates = [
-        Path.cwd() / "know_your_ip.toml",
-        Path.home() / ".config" / "know-your-ip" / "config.toml",
-        Path.home() / ".know-your-ip.toml",
-    ]
 
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-
-    return None
+    enabled: bool = False
+    api_key: Secret = None
+    days: int = Field(default=180, ge=1, le=365)
 
 
-def load_config(config_file: Path | None = None) -> KnowYourIPConfig:
-    """Load configuration from multiple sources with proper validation.
+class PingConfig(_Section):
+    """ICMP ping configuration."""
 
-    Sources are loaded in this order (later sources override earlier ones):
-    1. Default configuration (embedded in code)
-    2. Configuration file (TOML format)
-    3. Environment variables
+    enabled: bool = False
+    timeout: int = Field(default=3000, ge=1, description="Milliseconds")
+    count: int = Field(default=3, ge=1)
 
-    Args:
-        config_file: Path to configuration file. If None, will search standard locations.
 
-    Returns:
-        Validated configuration object.
+class TracerouteConfig(_Section):
+    """Traceroute configuration."""
 
-    Raises:
-        ConfigurationError: If configuration is invalid.
+    enabled: bool = False
+    max_hops: int = Field(default=30, ge=1, le=255)
+
+
+class TimezoneConfig(_Section):
+    """Offline timezone lookup configuration.
+
+    Note:
+        Requires the ``timezone`` extra, which pulls in ``timezonefinder``.
+        That package is large and ships wheels only for linux-x86_64, so it is
+        off by default. MaxMind's City database already reports
+        ``location.time_zone``; enable this for an independent cross-check.
+
+        Replaces the abandoned ``tzwhere`` package, which is incompatible with
+        NumPy 1.24 and later.
     """
-    config_dict = {}
 
-    # Load from file if provided or found
-    if config_file is None:
-        config_file = find_config_file()
-
-    if config_file and config_file.exists():
-        try:
-            with open(config_file, "rb") as f:
-                file_config = tomllib.load(f)
-                config_dict.update(file_config)
-        except (OSError, tomllib.TOMLDecodeError) as e:
-            raise ConfigurationError(
-                f"Failed to load config file {config_file}: {e}"
-            ) from e
-
-    # Override with environment variables
-    env_config = load_from_env()
-    for section, values in env_config.items():
-        if section not in config_dict:
-            config_dict[section] = {}
-        config_dict[section].update(values)
-
-    # Validate and return typed config
-    try:
-        return KnowYourIPConfig(**config_dict)
-    except Exception as e:
-        raise ConfigurationError(f"Configuration validation failed: {e}") from e
+    enabled: bool = False
 
 
-def create_default_config(output_file: Path) -> None:
-    """Create a default configuration file with sensible defaults."""
+class APIVoidConfig(_Section):
+    """APIVoid IP reputation configuration.
 
-    toml_content = """# Know Your IP Configuration
-# See https://github.com/themains/know-your-ip for documentation
+    Note:
+        Uses API v2. There is no permanent free tier.
+    """
 
-[maxmind]
-enabled = true
-db_path = "./db"
+    enabled: bool = False
+    api_key: Secret = None
 
-[geonames]
-enabled = false
-# username = "your_username_here"  # Register at http://www.geonames.org/login
 
-[abuseipdb]
-enabled = false
-# api_key = "your_api_key_here"  # Register at https://www.abuseipdb.com/register
-days = 180
+class CensysConfig(_Section):
+    """Censys Platform API configuration.
 
-[ping]
-enabled = false
-timeout = 3000
-count = 3
+    Note:
+        Legacy Search (``search.censys.io``) was disabled for free accounts in
+        March 2025 and is fully deprecated in September 2026. ``api_key`` is a
+        Personal Access Token. ``organization_id`` should be left unset on the
+        free tier.
+    """
 
-[traceroute]
-enabled = false
-max_hops = 30
+    enabled: bool = False
+    api_url: str = "https://api.platform.censys.io"
+    api_key: Secret = None
+    organization_id: Secret = None
 
-[tzwhere]
-enabled = true
 
-[ipvoid]
-enabled = true
+class ShodanConfig(_Section):
+    """Shodan configuration.
 
-[apivoid]
-enabled = false
-# api_key = "your_api_key_here"  # Register at https://app.apivoid.com/register
+    Note:
+        IP lookups require a paid membership; free API keys cannot call the
+        host endpoint. Requires the ``shodan`` optional dependency.
+    """
 
-[censys]
-enabled = false
-api_url = "https://search.censys.io/api"
-# api_key = "your_api_key_here"  # Register at https://search.censys.io/register
+    enabled: bool = False
+    api_key: Secret = None
 
-[shodan]
-enabled = false
-# api_key = "your_api_key_here"  # Register at https://account.shodan.io/register
 
-[virustotal]
-enabled = false
-# api_key = "your_api_key_here"  # Register at https://www.virustotal.com/
+class VirusTotalConfig(_Section):
+    """VirusTotal API v3 configuration.
 
-[output]
-columns = [
+    Note:
+        Public API limits are 500 requests/day and 4 requests/minute.
+    """
+
+    enabled: bool = False
+    api_key: Secret = None
+
+
+DEFAULT_OUTPUT_COLUMNS = [
     "ip",
     "maxmind.continent.names.en",
     "maxmind.country.names.en",
+    "maxmind.city.names.en",
+    "maxmind.location.latitude",
+    "maxmind.location.longitude",
     "maxmind.location.time_zone",
     "maxmind.postal.code",
     "maxmind.registered_country.names.en",
-    "tzwhere.timezone",
-    "abuseipdb.bad_isp",
+    "timezone.name",
+    "abuseipdb.abuse_confidence_score",
     "abuseipdb.categories",
-    "ipvoid.blacklist_status",
-    "ipvoid.reverse_dns",
+    "abuseipdb.country_code",
+    "abuseipdb.isp",
+    "abuseipdb.usage_type",
+    "abuseipdb.total_reports",
+    "abuseipdb.is_tor",
+    "virustotal.harmless",
+    "virustotal.malicious",
+    "virustotal.suspicious",
+    "virustotal.reputation",
+    "virustotal.asn",
+    "virustotal.as_owner",
+    "virustotal.country",
+    "virustotal.network",
+    "virustotal.rir",
+    "virustotal.tags",
+    "censys.asn",
+    "censys.as_name",
+    "censys.country",
+    "censys.city",
+    "censys.ports",
     "apivoid.anonymity.is_hosting",
     "apivoid.anonymity.is_proxy",
     "apivoid.anonymity.is_tor",
@@ -403,13 +221,219 @@ columns = [
     "shodan.os",
     "shodan.ports",
 ]
-"""
 
+
+class OutputConfig(_Section):
+    """Output column selection for CSV writing.
+
+    Note:
+        This list controls the CSV written by the command line interface only.
+        :func:`know_your_ip.query_ip` always returns every field it collected.
+    """
+
+    columns: list[str] = Field(default_factory=lambda: list(DEFAULT_OUTPUT_COLUMNS))
+
+
+class KnowYourIPConfig(BaseModel):
+    """Top-level configuration."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    maxmind: MaxMindConfig = Field(default_factory=MaxMindConfig)
+    geonames: GeoNamesConfig = Field(default_factory=GeoNamesConfig)
+    abuseipdb: AbuseIPDBConfig = Field(default_factory=AbuseIPDBConfig)
+    ping: PingConfig = Field(default_factory=PingConfig)
+    traceroute: TracerouteConfig = Field(default_factory=TracerouteConfig)
+    timezone: TimezoneConfig = Field(default_factory=TimezoneConfig)
+    apivoid: APIVoidConfig = Field(default_factory=APIVoidConfig)
+    censys: CensysConfig = Field(default_factory=CensysConfig)
+    shodan: ShodanConfig = Field(default_factory=ShodanConfig)
+    virustotal: VirusTotalConfig = Field(default_factory=VirusTotalConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
+
+
+ENV_PREFIX = "KNOW_YOUR_IP_"
+
+
+def load_from_env() -> dict[str, Any]:
+    """Read configuration overrides from environment variables.
+
+    Variables are named ``KNOW_YOUR_IP_<SECTION>_<FIELD>``. Section names are
+    matched against the known sections so that a field name containing an
+    underscore (``API_KEY``, ``DB_PATH``) is split correctly, and an
+    unrecognized variable produces a warning rather than being dropped.
+
+    Returns:
+        A nested dict suitable for validation by :class:`KnowYourIPConfig`.
+
+    Example:
+        ``KNOW_YOUR_IP_VIRUSTOTAL_API_KEY=abc`` becomes
+        ``{"virustotal": {"api_key": "abc"}}``.
+    """
+    sections = set(KnowYourIPConfig.model_fields)
+    config: dict[str, Any] = {}
+
+    for key, raw in os.environ.items():
+        if not key.startswith(ENV_PREFIX):
+            continue
+
+        remainder = key[len(ENV_PREFIX) :].lower()
+        section = next(
+            (s for s in sections if remainder.startswith(f"{s}_")),
+            None,
+        )
+        if section is None:
+            logger.warning("Ignoring unrecognized environment variable %s", key)
+            continue
+
+        field = remainder[len(section) + 1 :]
+        model = KnowYourIPConfig.model_fields[section].annotation
+        if field not in getattr(model, "model_fields", {}):
+            logger.warning(
+                "Ignoring %s: %r is not a field of [%s]", key, field, section
+            )
+            continue
+
+        config.setdefault(section, {})[field] = _coerce(raw)
+
+    return config
+
+
+def _coerce(value: str) -> str | bool | int:
+    """Convert an environment variable string to bool or int where obvious.
+
+    Args:
+        value: Raw environment variable value.
+
+    Returns:
+        The converted value, or the original string.
+    """
+    match value.lower():
+        case "true" | "1" | "yes" | "on":
+            return True
+        case "false" | "0" | "no" | "off":
+            return False
+        case _:
+            return int(value) if value.lstrip("-").isdigit() else value
+
+
+def find_config_file() -> Path | None:
+    """Find a configuration file in the standard locations.
+
+    Search order is ``./know_your_ip.toml``, then
+    ``~/.config/know-your-ip/config.toml``, then ``~/.know-your-ip.toml``.
+
+    Returns:
+        The first path that exists, or None.
+    """
+    candidates = [
+        Path.cwd() / "know_your_ip.toml",
+        Path.home() / ".config" / "know-your-ip" / "config.toml",
+        Path.home() / ".know-your-ip.toml",
+    ]
+    return next((c for c in candidates if c.exists()), None)
+
+
+def load_config(config_file: Path | None = None) -> KnowYourIPConfig:
+    """Load configuration from a TOML file and environment variables.
+
+    Defaults are overridden by the file, which is overridden by environment
+    variables.
+
+    Args:
+        config_file: Path to a configuration file. If None, standard locations
+            are searched.
+
+    Returns:
+        A validated configuration object.
+
+    Raises:
+        ConfigurationError: If the file cannot be read or validation fails.
+    """
+    config_dict: dict[str, Any] = {}
+
+    if config_file is None:
+        config_file = find_config_file()
+
+    if config_file and config_file.exists():
+        try:
+            with open(config_file, "rb") as f:
+                config_dict.update(tomllib.load(f))
+        except (OSError, tomllib.TOMLDecodeError) as e:
+            raise ConfigurationError(
+                f"Failed to load config file {config_file}: {e}"
+            ) from e
+
+    for section, values in load_from_env().items():
+        config_dict.setdefault(section, {}).update(values)
+
+    try:
+        return KnowYourIPConfig(**config_dict)
+    except Exception as e:
+        raise ConfigurationError(f"Configuration validation failed: {e}") from e
+
+
+def render_default_config() -> str:
+    """Render a commented default configuration file.
+
+    The service sections and the output column list are generated from the
+    models, so this cannot drift from :class:`KnowYourIPConfig`.
+
+    Returns:
+        TOML text.
+    """
+    registration = {
+        "geonames": "https://www.geonames.org/login",
+        "abuseipdb": "https://www.abuseipdb.com/register",
+        "apivoid": "https://app.apivoid.com/register",
+        "censys": "https://platform.censys.io/",
+        "shodan": "https://account.shodan.io/register",
+        "virustotal": "https://www.virustotal.com/gui/join-us",
+    }
+
+    lines = [
+        "# Know Your IP configuration",
+        "# See https://github.com/themains/know-your-ip",
+        "",
+    ]
+
+    for name, field in KnowYourIPConfig.model_fields.items():
+        if name == "output":
+            continue
+        model = field.annotation
+        if not (isinstance(model, type) and issubclass(model, BaseModel)):
+            continue
+        lines.append(f"[{name}]")
+        for fname, finfo in model.model_fields.items():
+            default = finfo.get_default(call_default_factory=True)
+            if fname in {"api_key", "username", "organization_id"}:
+                url = registration.get(name)
+                hint = f"  # Register at {url}" if url else ""
+                lines.append(f'# {fname} = "your_value_here"{hint}')
+            elif isinstance(default, bool):
+                lines.append(f"{fname} = {str(default).lower()}")
+            elif isinstance(default, Path):
+                lines.append(f'{fname} = "./db"')
+            elif isinstance(default, str):
+                lines.append(f'{fname} = "{default}"')
+            else:
+                lines.append(f"{fname} = {default}")
+        lines.append("")
+
+    lines.append("[output]")
+    lines.append("columns = [")
+    lines.extend(f'    "{c}",' for c in DEFAULT_OUTPUT_COLUMNS)
+    lines.append("]")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+def create_default_config(output_file: Path) -> None:
+    """Write a default configuration file.
+
+    Args:
+        output_file: Destination path. Parent directories are created.
+    """
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    output_file.write_text(toml_content)
-
-
-class ConfigurationError(Exception):
-    """Configuration-related errors."""
-
-    pass
+    output_file.write_text(render_default_config(), encoding="utf-8")

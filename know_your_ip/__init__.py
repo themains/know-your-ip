@@ -1,50 +1,61 @@
-"""Know Your IP
+"""Know Your IP.
 
-A Python package to get comprehensive data about IP addresses including:
+Collect data about IP addresses from multiple services:
+
 - Geolocation (latitude/longitude, country, city, timezone)
-- Security analysis (blacklist status via multiple services)
-- Network information (open ports, running services)
+- Reputation and abuse reports (AbuseIPDB, VirusTotal, APIVoid)
+- Exposed services and open ports (Shodan, Censys)
 - Network diagnostics (ping, traceroute)
-
-Supports multiple data sources including MaxMind, AbuseIPDB, VirusTotal,
-Shodan, Censys, and more.
 """
 
-from importlib.metadata import version
+from importlib.metadata import PackageNotFoundError, version
 
-__version__ = version("know_your_ip")
+try:
+    __version__ = version("know_your_ip")
+except PackageNotFoundError:  # pragma: no cover - source checkout without install
+    __version__ = "0.0.0.dev0"
 
-from .config import KnowYourIPConfig, load_config
-from .know_your_ip import (
+from .config import (
+    ConfigurationError,
+    KnowYourIPConfig,
+    create_default_config,
+    load_config,
+)
+from .core import (
+    InvalidIPError,
     abuseipdb_api,
-    abuseipdb_web,
     apivoid_api,
     censys_api,
     geonames_timezone,
-    ipvoid_scan,
     maxmind_geocode_ip,
     ping,
     query_ip,
+    select_columns,
     shodan_api,
+    timezone_at,
     traceroute,
-    tzwhere_timezone,
+    validate_ip,
     virustotal_api,
 )
 
 __all__ = [
+    "ConfigurationError",
+    "InvalidIPError",
     "KnowYourIPConfig",
+    "__version__",
+    "abuseipdb_api",
+    "apivoid_api",
+    "censys_api",
+    "create_default_config",
+    "geonames_timezone",
     "load_config",
     "maxmind_geocode_ip",
-    "geonames_timezone",
-    "tzwhere_timezone",
-    "ipvoid_scan",
-    "abuseipdb_web",
-    "abuseipdb_api",
-    "censys_api",
-    "shodan_api",
-    "virustotal_api",
     "ping",
-    "traceroute",
     "query_ip",
-    "apivoid_api",
+    "select_columns",
+    "shodan_api",
+    "timezone_at",
+    "traceroute",
+    "validate_ip",
+    "virustotal_api",
 ]

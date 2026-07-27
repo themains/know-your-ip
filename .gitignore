@@ -23,3 +23,5 @@ coverage.xml
 *.py,cover
 .github/.DS_Store
 know_your_ip.toml
+# The example config is documentation, not a user's local secrets file.
+!examples/know_your_ip.toml
