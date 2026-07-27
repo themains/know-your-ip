@@ -24,9 +24,5 @@ jobs:
       # which differ per platform: the macOS -W flag is milliseconds while
       # Linux's is seconds, and CSV needs newline="" on Windows. Both bugs
       # shipped unnoticed under a Linux-only matrix.
-      # windows-latest is omitted for now: py-canon's reusable-ci runs its
-      # "Sync environment" step with bash syntax and no `shell: bash`, so
-      # PowerShell fails to parse it before any test runs. Re-add once that
-      # step declares a shell.
-      os: '["ubuntu-latest", "macos-latest"]'
+      os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
       python-versions: '["3.11", "3.14"]'
