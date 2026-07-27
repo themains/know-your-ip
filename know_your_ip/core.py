@@ -83,9 +83,18 @@ def setup_logger(verbose: bool = False, log_file: Path | None = None) -> None:
     root = logging.getLogger()
     root.setLevel(level)
 
+    # Remove handlers this function added previously. main() may run more than
+    # once in a process (tests, or an embedding caller), and without this each
+    # run stacks another console and file handler, duplicating every record
+    # and holding the old log file open.
+    for existing in [h for h in root.handlers if getattr(h, "_kyip", False)]:
+        root.removeHandler(existing)
+        existing.close()
+
     console = logging.StreamHandler()
     console.setLevel(level)
     console.setFormatter(logging.Formatter("%(message)s"))
+    console._kyip = True  # type: ignore[attr-defined]
     root.addHandler(console)
 
     if log_file is not None:
@@ -97,6 +106,7 @@ def setup_logger(verbose: bool = False, log_file: Path | None = None) -> None:
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
+        handler._kyip = True  # type: ignore[attr-defined]
         root.addHandler(handler)
 
     logging.getLogger("requests").setLevel(logging.WARNING)
