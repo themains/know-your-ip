@@ -116,6 +116,8 @@ class TestDefaultRegistry:
         names = {p.name for p in REGISTRY.providers}
 
         assert names == {
+            "network",
+            "rdap",
             "maxmind",
             "abuseipdb",
             "virustotal",

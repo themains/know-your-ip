@@ -125,6 +125,31 @@ class TimezoneConfig(_Section):
     enabled: bool = False
 
 
+class NetworkConfig(_Section):
+    """Keyless address classification and reverse DNS.
+
+    Note:
+        Classification is offline and free. It also identifies addresses that
+        are not globally routable, which are worth skipping before spending
+        metered quota on them.
+    """
+
+    enabled: bool = True
+    reverse_dns: bool = True
+    dns_timeout: float = Field(default=5.0, gt=0)
+
+
+class RDAPConfig(_Section):
+    """Registry data via RDAP, the IETF successor to port-43 WHOIS.
+
+    Note:
+        Free and keyless. Gives the responsible registry, allocation dates,
+        and an abuse contact.
+    """
+
+    enabled: bool = True
+
+
 class APIVoidConfig(_Section):
     """APIVoid IP reputation configuration.
 
@@ -177,6 +202,15 @@ class VirusTotalConfig(_Section):
 
 DEFAULT_OUTPUT_COLUMNS = [
     "ip",
+    "network.version",
+    "network.category",
+    "network.is_routable",
+    "network.reverse_dns",
+    "rdap.handle",
+    "rdap.name",
+    "rdap.country",
+    "rdap.registration",
+    "rdap.abuse_email",
     "maxmind.continent.names.en",
     "maxmind.country.names.en",
     "maxmind.city.names.en",
@@ -245,6 +279,8 @@ class KnowYourIPConfig(BaseModel):
     ping: PingConfig = Field(default_factory=PingConfig)
     traceroute: TracerouteConfig = Field(default_factory=TracerouteConfig)
     timezone: TimezoneConfig = Field(default_factory=TimezoneConfig)
+    network: NetworkConfig = Field(default_factory=NetworkConfig)
+    rdap: RDAPConfig = Field(default_factory=RDAPConfig)
     apivoid: APIVoidConfig = Field(default_factory=APIVoidConfig)
     censys: CensysConfig = Field(default_factory=CensysConfig)
     shodan: ShodanConfig = Field(default_factory=ShodanConfig)

@@ -26,6 +26,14 @@ max_hops = 30
 [timezone]
 enabled = false
 
+[network]
+enabled = true
+reverse_dns = true
+dns_timeout = 5.0
+
+[rdap]
+enabled = true
+
 [apivoid]
 enabled = false
 # api_key = "your_value_here"  # Register at https://app.apivoid.com/register
@@ -47,6 +55,15 @@ enabled = false
 [output]
 columns = [
     "ip",
+    "network.version",
+    "network.category",
+    "network.is_routable",
+    "network.reverse_dns",
+    "rdap.handle",
+    "rdap.name",
+    "rdap.country",
+    "rdap.registration",
+    "rdap.abuse_email",
     "maxmind.continent.names.en",
     "maxmind.country.names.en",
     "maxmind.city.names.en",

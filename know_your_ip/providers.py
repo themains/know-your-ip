@@ -182,9 +182,21 @@ def build_default_registry() -> Registry:
     Returns:
         The populated registry.
     """
-    from . import core
+    from . import core, network
 
     for provider in [
+        Provider(
+            name="network",
+            fetch=network.network_info,
+            section="network",
+            cost="free",
+        ),
+        Provider(
+            name="rdap",
+            fetch=network.rdap_lookup,
+            section="rdap",
+            cost="free",
+        ),
         Provider(
             name="maxmind",
             fetch=core.maxmind_geocode_ip,
