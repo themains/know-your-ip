@@ -7,6 +7,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from know_your_ip import KnowYourIPConfig, load_config
 from know_your_ip.config import (
@@ -52,7 +53,7 @@ class TestConfigModels:
 
     def test_abuseipdb_days_bounded_to_api_maximum(self):
         """The AbuseIPDB API rejects maxAgeInDays above 365."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             AbuseIPDBConfig(days=400)
 
     def test_placeholder_api_key_becomes_none(self):
@@ -64,7 +65,7 @@ class TestConfigModels:
     def test_unknown_key_is_rejected(self):
         """Silently ignoring unknown keys hid a stale Censys uid/secret block
         in the shipped example configuration."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             AbuseIPDBConfig(api_kye="typo")  # type: ignore[call-arg]
 
     def test_timezone_disabled_by_default(self):
@@ -144,15 +145,15 @@ class TestEnvironmentConfig:
         assert config["geonames"]["username"] == "test_user"
         assert config["abuseipdb"]["days"] == 30
 
-    def test_multi_word_field_names(self, clean_env, monkeypatch):
+    def test_multi_word_field_names(self, clean_env, monkeypatch, tmp_path):
         """Splitting on the first underscore mangles fields like API_KEY."""
         monkeypatch.setenv("KNOW_YOUR_IP_VIRUSTOTAL_API_KEY", "secret")
-        monkeypatch.setenv("KNOW_YOUR_IP_MAXMIND_DB_PATH", "/tmp/db")
+        monkeypatch.setenv("KNOW_YOUR_IP_MAXMIND_DB_PATH", str(tmp_path / "db"))
 
         config = load_from_env()
 
         assert config["virustotal"]["api_key"] == "secret"
-        assert config["maxmind"]["db_path"] == "/tmp/db"
+        assert config["maxmind"]["db_path"] == str(tmp_path / "db")
 
     def test_unknown_variable_ignored_with_warning(
         self, clean_env, monkeypatch, caplog

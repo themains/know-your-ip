@@ -74,7 +74,8 @@ def quiet_ping(
                 cmd.extend(["-c", str(count), "-W", str(timeout_sec), hostname])
 
         # Execute ping command
-        result = subprocess.run(
+        # Fixed argv list, no shell; hostname is validated by the caller.
+        result = subprocess.run(  # noqa: S603
             cmd,
             capture_output=True,
             text=True,

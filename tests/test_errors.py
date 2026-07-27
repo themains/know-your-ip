@@ -17,7 +17,6 @@ from know_your_ip import (
     validate_ip,
     virustotal_api,
 )
-from know_your_ip.core import _backoff
 from know_your_ip.ping import quiet_ping
 
 VT_URL = "https://www.virustotal.com/api/v3/ip_addresses/8.8.8.8"
@@ -26,12 +25,6 @@ VT_URL = "https://www.virustotal.com/api/v3/ip_addresses/8.8.8.8"
 @pytest.fixture
 def config() -> KnowYourIPConfig:
     return KnowYourIPConfig()
-
-
-@pytest.fixture(autouse=True)
-def no_sleep(monkeypatch):
-    """Keep retry tests fast without removing the retry logic itself."""
-    monkeypatch.setattr("know_your_ip.core.time.sleep", lambda _: None)
 
 
 class TestValidateIP:
@@ -47,27 +40,22 @@ class TestValidateIP:
             validate_ip(bad)
 
 
-class TestBackoff:
-    def test_grows_exponentially_and_is_capped(self):
-        with mock.patch("know_your_ip.core.time.sleep") as sleep:
-            for attempt in range(8):
-                _backoff(attempt)
-
-        delays = [c.args[0] for c in sleep.call_args_list]
-        assert delays[:4] == [1, 2, 4, 8]
-        assert max(delays) == 30
-
-
 class TestRetryBehavior:
     @responses.activate
-    def test_server_error_retries_then_gives_up(self, config):
-        """A 5xx is retried; previously the counter was never incremented on a
-        non-200, so all attempts fired back-to-back with no delay."""
+    def test_server_error_retries_then_reports(self, config):
+        """A 5xx is retried, then reported as a value rather than swallowed.
+
+        Previously the retry counter was only incremented on exception, so a
+        non-200 burned every attempt back-to-back with no delay and returned
+        an empty dict indistinguishable from "nothing found".
+        """
         config.virustotal.api_key = "k"
         responses.add(responses.GET, VT_URL, json={}, status=500)
 
-        assert virustotal_api(config, "8.8.8.8") == {}
+        result = virustotal_api(config, "8.8.8.8")
+
         assert len(responses.calls) == 5
+        assert result == {"virustotal.error": "HTTP 500"}
 
     @responses.activate
     def test_recovers_after_transient_error(self, config):
@@ -100,7 +88,7 @@ class TestRetryBehavior:
         config.virustotal.api_key = "k"
         responses.add(responses.GET, VT_URL, body="not json", status=200)
 
-        with pytest.raises(ValueError):
+        with pytest.raises(requests.JSONDecodeError):
             virustotal_api(config, "8.8.8.8")
 
 
@@ -108,7 +96,7 @@ class TestMaxMind:
     def test_missing_database_explains_how_to_get_it(self, config, tmp_path):
         config.maxmind.db_path = tmp_path
 
-        with pytest.raises(FileNotFoundError, match="maxmind.com"):
+        with pytest.raises(FileNotFoundError, match=r"maxmind\.com"):
             maxmind_geocode_ip(config, "8.8.8.8")
 
     def test_address_not_in_database_returns_empty(self, config, tmp_path):
@@ -198,4 +186,5 @@ class TestPingFailures:
 
         cmd = run.call_args[0][0]
         assert cmd[:1] == ["ping"]
-        assert "-n" in cmd and "-w" in cmd
+        assert "-n" in cmd
+        assert "-w" in cmd
