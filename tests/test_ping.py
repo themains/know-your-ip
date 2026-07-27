@@ -112,19 +112,43 @@ class TestTraceroute:
         with pytest.raises(ValueError, match="Not a valid IP address"):
             os_traceroute("8.8.8.8 -w 99999")
 
-    def test_uses_traceroute6_for_ipv6(self):
-        with mock.patch("know_your_ip.traceroute.subprocess.run") as run:
-            run.return_value = mock.Mock(returncode=0, stdout="ok", stderr="")
-            os_traceroute("2001:4860:4860::8888")
+    @staticmethod
+    def _captured_cmd(system: str, ip: str) -> list[str]:
+        """Capture the command built for a given platform.
 
-        assert run.call_args[0][0][0] == "traceroute6"
+        The platform is forced rather than inferred, so each branch is
+        exercised on every runner instead of only on its native OS.
+        """
+        with (
+            mock.patch("know_your_ip.traceroute.platform.system", return_value=system),
+            mock.patch("know_your_ip.traceroute.subprocess.run") as run,
+        ):
+            run.return_value = mock.Mock(returncode=0, stdout="ok", stderr="")
+            os_traceroute(ip)
+        return run.call_args[0][0]
+
+    def test_uses_traceroute6_for_ipv6(self):
+        cmd = self._captured_cmd("Linux", "2001:4860:4860::8888")
+
+        assert cmd[0] == "traceroute6"
+
+    def test_uses_traceroute_for_ipv4(self):
+        cmd = self._captured_cmd("Linux", "8.8.8.8")
+
+        assert cmd[0] == "traceroute"
 
     def test_passes_end_of_options_separator(self):
-        with mock.patch("know_your_ip.traceroute.subprocess.run") as run:
-            run.return_value = mock.Mock(returncode=0, stdout="ok", stderr="")
-            os_traceroute("8.8.8.8")
+        """`--` stops the target being read as further traceroute options."""
+        cmd = self._captured_cmd("Linux", "8.8.8.8")
 
-        assert "--" in run.call_args[0][0]
+        assert "--" in cmd
+
+    def test_windows_uses_tracert(self):
+        """Windows has no traceroute/traceroute6 and does not accept `--`."""
+        cmd = self._captured_cmd("Windows", "8.8.8.8")
+
+        assert cmd[0] == "tracert"
+        assert "--" not in cmd
 
     def test_timeout_returns_empty_not_hang(self):
         import subprocess

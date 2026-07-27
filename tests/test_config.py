@@ -107,7 +107,10 @@ username = "test_user"
             config = load_config(config_file)
 
         assert config.maxmind.enabled is False
-        assert config.maxmind.db_path == Path("/custom/path")
+        # Paths are resolved, and on Windows that prepends a drive letter, so
+        # compare the meaningful components rather than the literal string.
+        assert config.maxmind.db_path.is_absolute()
+        assert config.maxmind.db_path.parts[-2:] == ("custom", "path")
         assert config.geonames.username == "test_user"
 
     def test_invalid_toml_raises(self):
@@ -185,7 +188,9 @@ class TestConfigUtils:
     def test_find_config_file_returns_none_in_empty_dir(self, monkeypatch, tmp_path):
         """Previously asserted 'None or Path', which cannot fail."""
         monkeypatch.chdir(tmp_path)
-        monkeypatch.setenv("HOME", str(tmp_path))
+        # Path.home() reads USERPROFILE on Windows, so setting HOME is not
+        # enough; patch the function the code actually calls.
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
 
         assert find_config_file() is None
 
