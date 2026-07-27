@@ -6,6 +6,9 @@ here corresponds to a defect that shipped because the API layer had no tests.
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 import responses
 
@@ -19,11 +22,13 @@ from know_your_ip import (
     select_columns,
     virustotal_api,
 )
+from know_your_ip.core import _parse_censys
 
 VT_URL = "https://www.virustotal.com/api/v3/ip_addresses/8.8.8.8"
 ABUSE_URL = "https://api.abuseipdb.com/api/v2/check"
 GEONAMES_URL = "https://secure.geonames.org/timezoneJSON"
 APIVOID_URL = "https://api.apivoid.com/v2/ip-reputation"
+CENSYS_URL = "https://api.platform.censys.io/v3/global/asset/host/8.8.8.8"
 
 
 @pytest.fixture
@@ -253,53 +258,131 @@ class TestAPIVoid:
 
 
 class TestCensys:
-    """Censys Platform API."""
+    """Censys Platform API.
+
+    The payload in tests/fixtures was captured from the live API, so the field
+    names, nesting, and value casing here are real rather than invented.
+    """
+
+    @staticmethod
+    def _fixture() -> dict:
+        path = Path(__file__).parent / "fixtures" / "censys_host_8.8.8.8.json"
+        return json.loads(path.read_text())
 
     @responses.activate
     def test_reads_result_resource_envelope(self, config):
         """The Platform API nests the host under result.resource."""
         config.censys.api_key = "pat"
-        url = "https://api.platform.censys.io/v3/global/asset/host/8.8.8.8"
-        responses.add(
-            responses.GET,
-            url,
-            json={
-                "result": {
-                    "resource": {
-                        "ip": "8.8.8.8",
-                        "autonomous_system": {"asn": 15169, "name": "GOOGLE"},
-                        "location": {"country": "United States"},
-                        "services": [
-                            {"port": 53, "transport_protocol": "UDP"},
-                            {"port": 443, "transport_protocol": "TCP"},
-                        ],
-                    }
-                }
-            },
-            status=200,
-        )
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
 
         out = censys_api(config, "8.8.8.8")
 
+        assert out["censys.ip"] == "8.8.8.8"
         assert out["censys.asn"] == 15169
-        assert out["censys.as_name"] == "GOOGLE"
-        assert out["censys.ports"] == "53|443"
-        assert out["censys.protocols"] == "TCP|UDP"
 
     @responses.activate
-    def test_sends_bearer_token(self, config):
-        """Platform auth is a Bearer personal access token."""
+    def test_sends_bearer_token_and_versioned_accept(self, config):
+        """Platform auth is a Bearer personal access token, and the endpoint
+        requires a versioned Accept header."""
         config.censys.api_key = "pat"
-        responses.add(
-            responses.GET,
-            "https://api.platform.censys.io/v3/global/asset/host/8.8.8.8",
-            json={"result": {"resource": {}}},
-            status=200,
-        )
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
 
         censys_api(config, "8.8.8.8")
 
-        assert responses.calls[0].request.headers["Authorization"] == "Bearer pat"
+        sent = responses.calls[0].request
+        assert sent.headers["Authorization"] == "Bearer pat"
+        assert sent.headers["Accept"] == "application/vnd.censys.api.v3.host.v1+json"
+
+    @responses.activate
+    def test_captures_announced_bgp_prefix(self, config):
+        """Routing data, in a request already being made."""
+        config.censys.api_key = "pat"
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
+
+        assert censys_api(config, "8.8.8.8")["censys.bgp_prefix"] == "8.8.8.0/24"
+
+    @responses.activate
+    def test_captures_coordinates_as_second_geolocation_source(self, config):
+        """Comparing these against MaxMind is what surfaces disagreement."""
+        config.censys.api_key = "pat"
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
+
+        out = censys_api(config, "8.8.8.8")
+
+        assert out["censys.latitude"] == 37.4056
+        assert out["censys.longitude"] == -122.0775
+
+    @responses.activate
+    def test_captures_registry_data(self, config):
+        """Cross-checks the rdap provider rather than duplicating it."""
+        config.censys.api_key = "pat"
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
+
+        out = censys_api(config, "8.8.8.8")
+
+        assert out["censys.whois_handle"] == "GOGL"
+        assert out["censys.whois_abuse_email"] == "network-abuse@google.com"
+        assert out["censys.whois_allocation_type"] == "ALLOCATION"
+
+    @responses.activate
+    def test_separates_application_and_transport_protocols(self, config):
+        """Services carry both, and transport values are lowercase. Conflating
+        them under one column loses real information."""
+        config.censys.api_key = "pat"
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
+
+        out = censys_api(config, "8.8.8.8")
+
+        assert out["censys.transport_protocols"] == "quic|tcp|udp"
+        assert out["censys.services"] == "DNS|HTTP|UNKNOWN"
+
+    @responses.activate
+    def test_ports_are_deduplicated_and_sorted(self, config):
+        """8.8.8.8 exposes 443 over both TCP and QUIC; "443|443" is noise."""
+        config.censys.api_key = "pat"
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
+
+        out = censys_api(config, "8.8.8.8")
+
+        assert out["censys.ports"] == "53|443|853"
+        assert out["censys.service_count"] == 4
+
+    @responses.activate
+    def test_records_observation_time(self, config):
+        """Provenance: when Censys actually saw these services."""
+        config.censys.api_key = "pat"
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
+
+        assert censys_api(config, "8.8.8.8")["censys.last_scan_time"]
+
+    @responses.activate
+    def test_dns_names_are_counted_not_expanded(self, config):
+        """The live response carries 100 hostnames; expanding them would add
+        100 columns to every CSV row."""
+        config.censys.api_key = "pat"
+        responses.add(responses.GET, CENSYS_URL, json=self._fixture(), status=200)
+
+        out = censys_api(config, "8.8.8.8")
+
+        assert isinstance(out["censys.dns_name_count"], int)
+        assert not any("dns_names" in k or k.endswith(".names") for k in out)
+
+    @responses.activate
+    def test_auth_failure_is_terminal(self, config):
+        config.censys.api_key = "bad"
+        responses.add(responses.GET, CENSYS_URL, json={}, status=401)
+
+        assert censys_api(config, "8.8.8.8") == {"censys.status": "auth_failed"}
+
+    def test_missing_key_returns_empty(self, config):
+        assert censys_api(config, "8.8.8.8") == {}
+
+    def test_sparse_resource_does_not_raise(self):
+        """Censys returns 200 with sparse data far more often than 404."""
+        out = _parse_censys({"ip": "203.0.113.5"})
+
+        assert out["censys.ip"] == "203.0.113.5"
+        assert out["censys.ports"] == ""
 
 
 class TestQueryIP:

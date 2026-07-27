@@ -1,0 +1,234 @@
+{
+  "result": {
+    "extensions": {},
+    "resource": {
+      "autonomous_system": {
+        "asn": 15169,
+        "bgp_prefix": "8.8.8.0/24",
+        "country_code": "US",
+        "description": "GOOGLE - Google LLC",
+        "name": "GOOGLE - Google LLC"
+      },
+      "dns": {
+        "forward_dns": {
+          "0-j.us": {
+            "name": "0-j.us",
+            "record_type": "a",
+            "resolve_time": "2026-07-27T06:46:09Z"
+          },
+          "0.0.d.5.9.6.0.7.4.0.1.0.0.2.ip6.arpa": {
+            "name": "0.0.d.5.9.6.0.7.4.0.1.0.0.2.ip6.arpa",
+            "record_type": "a",
+            "resolve_time": "2026-07-27T17:06:50Z"
+          }
+        },
+        "names": [
+          "0-j.us",
+          "0.0.d.5.9.6.0.7.4.0.1.0.0.2.ip6.arpa",
+          "0.88hi.vip"
+        ]
+      },
+      "ip": "8.8.8.8",
+      "location": {
+        "city": "Mountain View",
+        "continent": "North America",
+        "coordinates": {
+          "latitude": 37.4056,
+          "longitude": -122.0775
+        },
+        "country": "United States",
+        "country_code": "US",
+        "postal_code": "94043",
+        "province": "California",
+        "timezone": "America/Los_Angeles"
+      },
+      "service_count": 4,
+      "services": [
+        {
+          "dns": {
+            "r_code": "server_failure"
+          },
+          "ip": "8.8.8.8",
+          "port": 53,
+          "protocol": "DNS",
+          "scan_time": "2026-07-27T15:12:56Z",
+          "transport_protocol": "udp"
+        },
+        {
+          "ip": "8.8.8.8",
+          "port": 443,
+          "protocol": "UNKNOWN",
+          "scan_time": "2026-07-27T08:34:06Z",
+          "transport_protocol": "quic"
+        },
+        {
+          "cert": {
+            "fingerprint_sha256": "TRIMMED_FOR_FIXTURE"
+          },
+          "endpoints": [
+            {
+              "endpoint_type": "HTTP",
+              "hostname": "8.8.8.8",
+              "http": {
+                "body": "<HTML><HEAD><meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">\n<TITLE>302 Moved</TITLE></HEAD><BODY>\n<H1>302 Moved</H1>\nThe document has moved\n<A HREF=\"https://dns.google/\">here</A>.\r\n</BODY></HTML>\r\n",
+                "body_hash_sha1": "1fd84b37b709256752fe1f865f86b5bec05cf712",
+                "body_hash_sha256": "4d2df97f002e1d1905cf64366eddaa9a57f2f99b3cc7101c3bebff18428ed894",
+                "body_size": 216,
+                "headers": {
+                  "Access-Control-Allow-Origin": {
+                    "headers": [
+                      "*"
+                    ]
+                  },
+                  "Alt-Svc": {
+                    "headers": [
+                      "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000"
+                    ]
+                  },
+                  "Content-Length": {
+                    "headers": [
+                      "216"
+                    ]
+                  },
+                  "Content-Type": {
+                    "headers": [
+                      "text/html; charset=UTF-8"
+                    ]
+                  },
+                  "Date": {
+                    "headers": [
+                      "<REDACTED>"
+                    ]
+                  },
+                  "Location": {
+                    "headers": [
+                      "https://dns.google/"
+                    ]
+                  },
+                  "Server": {
+                    "headers": [
+                      "HTTP server (unknown)"
+                    ]
+                  },
+                  "X-Content-Type-Options": {
+                    "headers": [
+                      "nosniff"
+                    ]
+                  },
+                  "X-Frame-Options": {
+                    "headers": [
+                      "SAMEORIGIN"
+                    ]
+                  },
+                  "X-XSS-Protection": {
+                    "headers": [
+                      "0"
+                    ]
+                  }
+                },
+                "html_tags": [
+                  "<TITLE>302 Moved</TITLE>",
+                  "<meta http-equiv=\"content-type\" content=\"text/html;charset=utf-8\">"
+                ],
+                "html_title": "302 Moved",
+                "protocol": "HTTP/1.1",
+                "redirect_chain": [
+                  {
+                    "hostname": "dns.google",
+                    "http_status": {
+                      "code": 302,
+                      "reason": "Found"
+                    },
+                    "path": "/",
+                    "port": 443,
+                    "reason": "HTTP_3XX",
+                    "scheme": "https",
+                    "transport_protocol": "tcp"
+                  }
+                ],
+                "status_code": 302,
+                "status_reason": "Found",
+                "supported_versions": [
+                  "HTTP/1.1",
+                  "HTTP/2"
+                ],
+                "uri": "https://8.8.8.8/"
+              },
+              "ip": "8.8.8.8",
+              "path": "/",
+              "port": 443,
+              "scan_time": "2026-07-27T17:27:41Z",
+              "transport_protocol": "tcp"
+            }
+          ],
+          "ip": "8.8.8.8",
+          "port": 443,
+          "protocol": "HTTP",
+          "scan_time": "2026-07-27T17:27:41Z",
+          "tls": {
+            "version_selected": "TLSv1_3"
+          },
+          "transport_protocol": "tcp"
+        },
+        {
+          "cert": {
+            "fingerprint_sha256": "TRIMMED_FOR_FIXTURE"
+          },
+          "dns": {
+            "r_code": "server_failure"
+          },
+          "ip": "8.8.8.8",
+          "port": 853,
+          "protocol": "DNS",
+          "scan_time": "2026-07-27T14:43:23Z",
+          "tls": {
+            "version_selected": "TLSv1_3"
+          },
+          "transport_protocol": "tcp"
+        }
+      ],
+      "whois": {
+        "network": {
+          "allocation_type": "ALLOCATION",
+          "cidrs": [
+            "8.8.8.0/24"
+          ],
+          "created": "2023-12-28T00:00:00Z",
+          "handle": "GOGL",
+          "name": "Google LLC",
+          "updated": "2023-12-28T00:00:00Z"
+        },
+        "organization": {
+          "abuse_contacts": [
+            {
+              "email": "network-abuse@google.com",
+              "handle": "ABUSE5250-ARIN",
+              "name": "Abuse"
+            }
+          ],
+          "admin_contacts": [
+            {
+              "email": "arin-contact@google.com",
+              "handle": "ZG39-ARIN",
+              "name": "Google LLC"
+            }
+          ],
+          "city": "Mountain View",
+          "country": "US",
+          "handle": "GOGL",
+          "name": "Google LLC",
+          "postal_code": "94043",
+          "state": "CA",
+          "street": "1600 Amphitheatre Parkway",
+          "tech_contacts": [
+            {
+              "email": "arin-contact@google.com",
+              "handle": "ZG39-ARIN",
+              "name": "Google LLC"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
