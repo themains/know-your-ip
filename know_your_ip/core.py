@@ -9,7 +9,6 @@ import ipaddress
 import logging
 import re
 import sys
-import time
 from csv import DictWriter
 from functools import partial
 from multiprocessing.pool import ThreadPool
@@ -17,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 import maxminddb
-import requests
 
+from . import http
 from .config import KnowYourIPConfig
 from .config import load_config as load_modern_config
 from .ping import quiet_ping
@@ -26,7 +25,15 @@ from .traceroute import os_traceroute
 
 logger = logging.getLogger(__name__)
 
-MAX_RETRIES = 5
+# Published free-tier allowances. The shared transport paces requests to
+# these, so concurrency no longer means instant 429s.
+RATE_LIMITS = {
+    "virustotal": http.RateLimit(requests=4, per_seconds=60),
+    "abuseipdb": http.RateLimit(requests=1000, per_seconds=86400),
+    "censys": http.RateLimit(requests=1, per_seconds=2.5),
+    "geonames": http.RateLimit(requests=1000, per_seconds=3600),
+    "apivoid": http.RateLimit(requests=10, per_seconds=60),
+}
 
 # Official AbuseIPDB category codes.
 # Source: https://docs.abuseipdb.com/ and https://www.abuseipdb.com/categories
@@ -278,45 +285,30 @@ def geonames_timezone(
     Example:
         >>> geonames_timezone(config, 32.0617, 118.7778)  # doctest: +SKIP
     """
-    data: dict[str, Any] = {}
     payload = {"lat": lat, "lng": lng, "username": config.geonames.username}
 
-    for attempt in range(MAX_RETRIES):
-        try:
-            r = requests.get(
-                "https://secure.geonames.org/timezoneJSON", params=payload, timeout=30
-            )
-        except requests.RequestException as e:
-            logger.warning("geonames_timezone: %s", e)
-            _backoff(attempt)
-            continue
+    result = http.request(
+        "geonames",
+        "GET",
+        "https://secure.geonames.org/timezoneJSON",
+        params=payload,
+        rate_limit=RATE_LIMITS["geonames"],
+    )
+    if not result.ok:
+        return {"geonames.error": result.error or f"HTTP {result.status_code}"}
 
-        if r.status_code == 200:
-            try:
-                out = r.json()
-            except ValueError as e:
-                logger.warning("geonames_timezone: bad JSON: %s", e)
-                _backoff(attempt)
-                continue
-            # GeoNames signals quota and auth errors inside a 200 response.
-            if "status" in out:
-                logger.error("geonames_timezone: %s", out["status"].get("message"))
-                return {"geonames.error": out["status"].get("message")}
-            return {f"geonames.{k}": v for k, v in out.items()}
+    try:
+        out = result.json()
+    except ValueError as exc:
+        return {"geonames.error": f"invalid JSON: {exc}"}
 
-        logger.warning("geonames_timezone: HTTP %s", r.status_code)
-        _backoff(attempt)
+    # GeoNames reports quota and auth failures inside an HTTP 200 body.
+    if "status" in out:
+        message = out["status"].get("message")
+        logger.error("geonames: %s", message)
+        return {"geonames.error": message}
 
-    return data
-
-
-def _backoff(attempt: int) -> None:
-    """Sleep for an exponentially increasing interval.
-
-    Args:
-        attempt: Zero-based attempt number.
-    """
-    time.sleep(min(2**attempt, 30))
+    return {f"geonames.{k}": v for k, v in out.items()}
 
 
 _TIMEZONE_FINDER = None
@@ -350,7 +342,9 @@ def timezone_at(config: KnowYourIPConfig, lat: float, lng: float) -> str | None:
     global _TIMEZONE_FINDER
     if _TIMEZONE_FINDER is None:
         try:
-            from timezonefinder import TimezoneFinder
+            from timezonefinder import (  # pyright: ignore[reportMissingImports]
+                TimezoneFinder,
+            )
         except ImportError as exc:  # pragma: no cover - depends on extras
             raise ImportError(
                 "Offline timezone lookup requires the optional dependency. "
@@ -359,6 +353,29 @@ def timezone_at(config: KnowYourIPConfig, lat: float, lng: float) -> str | None:
 
         _TIMEZONE_FINDER = TimezoneFinder()
     return _TIMEZONE_FINDER.timezone_at(lat=float(lat), lng=float(lng))
+
+
+def _terminal_status(provider: str, status: int | None) -> dict[str, Any] | None:
+    """Map a non-retryable HTTP status to a recorded outcome.
+
+    Args:
+        provider: Provider name, used to prefix the key.
+        status: HTTP status code, if a response was received.
+
+    Returns:
+        A one-key result dict, or None if the status is not terminal.
+    """
+    match status:
+        case 404:
+            return {f"{provider}.status": "not_found"}
+        case 429:
+            logger.warning("%s: rate limit exceeded", provider)
+            return {f"{provider}.status": "rate_limited"}
+        case 401 | 403:
+            logger.error("%s: authentication failed - check API key", provider)
+            return {f"{provider}.status": "auth_failed"}
+        case _:
+            return None
 
 
 def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
@@ -379,61 +396,45 @@ def abuseipdb_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         >>> abuseipdb_api(config, "222.186.30.49")  # doctest: +SKIP
     """
     ip = validate_ip(ip)
-    out: dict[str, Any] = {}
 
     if not config.abuseipdb.api_key:
         logger.warning("AbuseIPDB API key not configured")
-        return out
+        return {}
 
-    headers = {"Key": config.abuseipdb.api_key, "Accept": "application/json"}
-    params = {
-        "ipAddress": ip,
-        "maxAgeInDays": config.abuseipdb.days,
-        "verbose": "",
+    result = http.request(
+        "abuseipdb",
+        "GET",
+        "https://api.abuseipdb.com/api/v2/check",
+        headers={"Key": config.abuseipdb.api_key, "Accept": "application/json"},
+        params={
+            "ipAddress": ip,
+            "maxAgeInDays": config.abuseipdb.days,
+            "verbose": "",
+        },
+        rate_limit=RATE_LIMITS["abuseipdb"],
+    )
+
+    if not result.ok:
+        terminal = _terminal_status("abuseipdb", result.status_code)
+        if terminal is not None:
+            return terminal
+        return {"abuseipdb.error": result.error or f"HTTP {result.status_code}"}
+
+    data = result.json().get("data", {})
+    return {
+        "abuseipdb.abuse_confidence_score": data.get("abuseConfidenceScore", 0),
+        "abuseipdb.country_code": data.get("countryCode"),
+        "abuseipdb.usage_type": data.get("usageType"),
+        "abuseipdb.isp": data.get("isp"),
+        "abuseipdb.domain": data.get("domain"),
+        "abuseipdb.is_public": data.get("isPublic"),
+        "abuseipdb.is_whitelisted": data.get("isWhitelisted"),
+        "abuseipdb.is_tor": data.get("isTor"),
+        "abuseipdb.total_reports": data.get("totalReports", 0),
+        "abuseipdb.num_distinct_users": data.get("numDistinctUsers", 0),
+        "abuseipdb.last_reported_at": data.get("lastReportedAt"),
+        "abuseipdb.categories": _abuseipdb_categories(data),
     }
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            r = requests.get(
-                "https://api.abuseipdb.com/api/v2/check",
-                headers=headers,
-                params=params,
-                timeout=30,
-            )
-        except requests.RequestException as e:
-            logger.warning("abuseipdb_api: %s", e)
-            _backoff(attempt)
-            continue
-
-        match r.status_code:
-            case 200:
-                data = r.json().get("data", {})
-                out["abuseipdb.abuse_confidence_score"] = data.get(
-                    "abuseConfidenceScore", 0
-                )
-                out["abuseipdb.country_code"] = data.get("countryCode")
-                out["abuseipdb.usage_type"] = data.get("usageType")
-                out["abuseipdb.isp"] = data.get("isp")
-                out["abuseipdb.domain"] = data.get("domain")
-                out["abuseipdb.is_public"] = data.get("isPublic")
-                out["abuseipdb.is_whitelisted"] = data.get("isWhitelisted")
-                out["abuseipdb.is_tor"] = data.get("isTor")
-                out["abuseipdb.total_reports"] = data.get("totalReports", 0)
-                out["abuseipdb.num_distinct_users"] = data.get("numDistinctUsers", 0)
-                out["abuseipdb.last_reported_at"] = data.get("lastReportedAt")
-                out["abuseipdb.categories"] = _abuseipdb_categories(data)
-                return out
-            case 429:
-                logger.warning("AbuseIPDB rate limit exceeded")
-                return {"abuseipdb.status": "rate_limited"}
-            case 401 | 403:
-                logger.error("AbuseIPDB authentication failed - check API key")
-                return {"abuseipdb.status": "auth_failed"}
-            case _:
-                logger.warning("AbuseIPDB returned HTTP %s", r.status_code)
-                _backoff(attempt)
-
-    return out
 
 
 def _abuseipdb_categories(data: dict[str, Any]) -> str:
@@ -474,8 +475,7 @@ def apivoid_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         Reputation fields prefixed with ``apivoid.``.
 
     Note:
-        Uses APIVoid API v2. The v1 endpoint
-        (``endpoint.apivoid.com/iprep/v1/``) reached its announced end of life
+        Uses APIVoid API v2. The v1 endpoint reached its announced end of life
         in February 2026. v2 is a POST with an ``X-API-Key`` header and returns
         the report at the top level rather than under ``data.report``.
 
@@ -485,52 +485,46 @@ def apivoid_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         https://www.apivoid.com/api/ip-reputation/
     """
     ip = validate_ip(ip)
-    data: dict[str, Any] = {}
 
     if not config.apivoid.api_key:
         logger.warning("APIVoid API key not configured")
-        return data
+        return {}
 
-    url = "https://api.apivoid.com/v2/ip-reputation"
-    headers = {
-        "X-API-Key": config.apivoid.api_key,
-        "Content-Type": "application/json",
-    }
+    result = http.request(
+        "apivoid",
+        "POST",
+        "https://api.apivoid.com/v2/ip-reputation",
+        headers={
+            "X-API-Key": config.apivoid.api_key,
+            "Content-Type": "application/json",
+        },
+        json={"ip": ip},
+        rate_limit=RATE_LIMITS["apivoid"],
+    )
 
-    for attempt in range(MAX_RETRIES):
-        try:
-            r = requests.post(url, headers=headers, json={"ip": ip}, timeout=30)
-        except requests.RequestException as e:
-            logger.warning("apivoid_api: %s", e)
-            _backoff(attempt)
-            continue
+    if not result.ok:
+        terminal = _terminal_status("apivoid", result.status_code)
+        if terminal is not None:
+            return terminal
+        return {"apivoid.error": result.error or f"HTTP {result.status_code}"}
 
-        if r.status_code == 200:
-            try:
-                out = r.json()
-            except ValueError as e:
-                logger.warning("apivoid_api: bad JSON: %s", e)
-                _backoff(attempt)
-                continue
+    try:
+        out = result.json()
+    except ValueError as exc:
+        return {"apivoid.error": f"invalid JSON: {exc}"}
 
-            if "error" in out:
-                logger.error("apivoid_api: %s", out["error"])
-                return {"apivoid.error": out["error"]}
+    if "error" in out:
+        logger.error("apivoid: %s", out["error"])
+        return {"apivoid.error": out["error"]}
 
-            for k, v in flatten_dict(out, separator=".").items():
-                data[f"apivoid.{k}"] = (
-                    "|".join(str(i) for i in v) if isinstance(v, list) else v
-                )
-            return data
-
-        logger.warning("apivoid_api: HTTP %s", r.status_code)
-        _backoff(attempt)
-
+    data: dict[str, Any] = {}
+    for k, v in flatten_dict(out, separator=".").items():
+        data[f"apivoid.{k}"] = "|".join(str(i) for i in v) if isinstance(v, list) else v
     return data
 
 
 def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
-    """Get host data from the Censys API.
+    """Get host data from the Censys Platform API.
 
     Args:
         config: Configuration object holding the Censys base URL and API key.
@@ -540,85 +534,68 @@ def censys_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         Host fields prefixed with ``censys.``.
 
     Note:
-        Targets the Censys Platform API. Legacy Search (``search.censys.io``)
-        was disabled for free accounts in March 2025 and is deprecated
-        entirely in September 2026. Authentication is a Personal Access Token.
-        ``organization_id`` is optional and should be omitted on the free tier.
-
-        The free tier is 100 credits/month.
+        Legacy Search (``search.censys.io``) was disabled for free accounts in
+        March 2025 and is deprecated entirely in September 2026. Authentication
+        is a Personal Access Token. ``organization_id`` is optional and should
+        be omitted on the free tier, which allows 100 credits/month.
 
     References:
         https://docs.censys.com/docs/platform-api-transition-guide
     """
     ip = validate_ip(ip)
-    data: dict[str, Any] = {}
 
     if not config.censys.api_key:
         logger.warning("Censys API key not configured")
-        return data
+        return {}
 
-    headers = {
-        "Authorization": f"Bearer {config.censys.api_key}",
-        "Accept": "application/vnd.censys.api.v3.host.v1+json",
-    }
     params = {}
     if config.censys.organization_id:
         params["organization_id"] = config.censys.organization_id
-    url = f"{config.censys.api_url.rstrip('/')}/v3/global/asset/host/{ip}"
 
-    for attempt in range(MAX_RETRIES):
-        try:
-            r = requests.get(url, headers=headers, params=params, timeout=30)
-        except requests.RequestException as e:
-            logger.warning("censys_api: %s", e)
-            _backoff(attempt)
-            continue
+    result = http.request(
+        "censys",
+        "GET",
+        f"{config.censys.api_url.rstrip('/')}/v3/global/asset/host/{ip}",
+        headers={
+            "Authorization": f"Bearer {config.censys.api_key}",
+            "Accept": "application/vnd.censys.api.v3.host.v1+json",
+        },
+        params=params,
+        rate_limit=RATE_LIMITS["censys"],
+    )
 
-        match r.status_code:
-            case 200:
-                # Platform API nests the host under result.resource.
-                result = r.json().get("result", {}).get("resource", {})
-                data["censys.ip"] = result.get("ip")
+    if not result.ok:
+        terminal = _terminal_status("censys", result.status_code)
+        if terminal is not None:
+            return terminal
+        return {"censys.error": result.error or f"HTTP {result.status_code}"}
 
-                asn_data = result.get("autonomous_system") or {}
-                data["censys.asn"] = asn_data.get("asn")
-                data["censys.as_name"] = asn_data.get("name")
-                data["censys.as_country_code"] = asn_data.get("country_code")
+    # The Platform API nests the host under result.resource.
+    resource = result.json().get("result", {}).get("resource", {})
+    asn_data = resource.get("autonomous_system") or {}
+    loc = resource.get("location") or {}
+    services = resource.get("services") or []
 
-                loc = result.get("location") or {}
-                data["censys.country"] = loc.get("country")
-                data["censys.country_code"] = loc.get("country_code")
-                data["censys.city"] = loc.get("city")
-                data["censys.timezone"] = loc.get("timezone")
-
-                services = result.get("services") or []
-                data["censys.ports"] = "|".join(
-                    str(s["port"]) for s in services if "port" in s
-                )
-                data["censys.protocols"] = "|".join(
-                    sorted(
-                        {
-                            s["transport_protocol"]
-                            for s in services
-                            if s.get("transport_protocol")
-                        }
-                    )
-                )
-                return data
-            case 404:
-                logger.info("censys: %s not found", ip)
-                return {"censys.status": "not_found"}
-            case 429:
-                logger.warning("Censys rate limit exceeded")
-                return {"censys.status": "rate_limited"}
-            case 401 | 403:
-                logger.error("Censys authentication failed - check API key")
-                return {"censys.status": "auth_failed"}
-            case _:
-                logger.warning("Censys returned HTTP %s", r.status_code)
-                _backoff(attempt)
-
-    return data
+    return {
+        "censys.ip": resource.get("ip"),
+        "censys.asn": asn_data.get("asn"),
+        "censys.as_name": asn_data.get("name"),
+        "censys.as_country_code": asn_data.get("country_code"),
+        "censys.country": loc.get("country"),
+        "censys.country_code": loc.get("country_code"),
+        "censys.city": loc.get("city"),
+        "censys.timezone": loc.get("timezone"),
+        "censys.ports": "|".join(str(s["port"]) for s in services if "port" in s),
+        "censys.protocols": "|".join(
+            sorted(
+                {
+                    s["transport_protocol"]
+                    for s in services
+                    if s.get("transport_protocol")
+                }
+            )
+        ),
+    }
 
 
 def shodan_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
@@ -633,10 +610,14 @@ def shodan_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
 
     Raises:
         ImportError: If the optional ``shodan`` extra is not installed.
+
+    Note:
+        IP lookups require a paid membership; free API keys cannot call the
+        host endpoint.
     """
     ip = validate_ip(ip)
     try:
-        import shodan
+        import shodan  # pyright: ignore[reportMissingImports]
     except ImportError as exc:  # pragma: no cover - depends on install extras
         raise ImportError(
             "Shodan support requires the optional dependency. "
@@ -648,16 +629,16 @@ def shodan_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         return {}
 
     api = shodan.Shodan(config.shodan.api_key)
-    data: dict[str, Any] = {}
     try:
         out = flatten_dict(api.host(ip), separator=".")
-    except shodan.APIError as e:
-        logger.warning("shodan_api(%s): %s", ip, e)
-        return {"shodan.error": str(e)}
+    except shodan.APIError as exc:
+        logger.warning("shodan(%s): %s", ip, exc)
+        return {"shodan.error": str(exc)}
 
-    for k, v in out.items():
-        data[f"shodan.{k}"] = "|".join(str(i) for i in v) if isinstance(v, list) else v
-    return data
+    return {
+        f"shodan.{k}": "|".join(str(i) for i in v) if isinstance(v, list) else v
+        for k, v in out.items()
+    }
 
 
 def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
@@ -684,68 +665,49 @@ def virustotal_api(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         >>> virustotal_api(config, "8.8.8.8")  # doctest: +SKIP
     """
     ip = validate_ip(ip)
-    data: dict[str, Any] = {}
 
     if not config.virustotal.api_key:
         logger.warning("VirusTotal API key not configured")
-        return data
+        return {}
 
-    url = f"https://www.virustotal.com/api/v3/ip_addresses/{ip}"
-    headers = {"x-apikey": config.virustotal.api_key}
+    result = http.request(
+        "virustotal",
+        "GET",
+        f"https://www.virustotal.com/api/v3/ip_addresses/{ip}",
+        headers={"x-apikey": config.virustotal.api_key},
+        rate_limit=RATE_LIMITS["virustotal"],
+    )
 
-    for attempt in range(MAX_RETRIES):
-        try:
-            r = requests.get(url, headers=headers, timeout=30)
-        except requests.RequestException as e:
-            logger.warning("virustotal_api: %s", e)
-            _backoff(attempt)
-            continue
+    if not result.ok:
+        terminal = _terminal_status("virustotal", result.status_code)
+        if terminal is not None:
+            return terminal
+        return {"virustotal.error": result.error or f"HTTP {result.status_code}"}
 
-        match r.status_code:
-            case 200:
-                attributes = r.json().get("data", {}).get("attributes", {})
+    attributes = result.json().get("data", {}).get("attributes", {})
+    stats = attributes.get("last_analysis_stats") or {}
+    votes = attributes.get("total_votes") or {}
 
-                stats = attributes.get("last_analysis_stats") or {}
-                data["virustotal.harmless"] = stats.get("harmless", 0)
-                data["virustotal.malicious"] = stats.get("malicious", 0)
-                data["virustotal.suspicious"] = stats.get("suspicious", 0)
-                data["virustotal.undetected"] = stats.get("undetected", 0)
-                data["virustotal.timeout"] = stats.get("timeout", 0)
-
-                data["virustotal.asn"] = attributes.get("asn")
-                data["virustotal.as_owner"] = attributes.get("as_owner")
-                data["virustotal.country"] = attributes.get("country")
-                data["virustotal.continent"] = attributes.get("continent")
-                data["virustotal.network"] = attributes.get("network")
-                data["virustotal.rir"] = attributes.get("regional_internet_registry")
-                data["virustotal.reputation"] = attributes.get("reputation", 0)
-                data["virustotal.jarm"] = attributes.get("jarm")
-                data["virustotal.last_analysis_date"] = attributes.get(
-                    "last_analysis_date"
-                )
-                data["virustotal.whois_date"] = attributes.get("whois_date")
-
-                votes = attributes.get("total_votes") or {}
-                data["virustotal.votes_harmless"] = votes.get("harmless", 0)
-                data["virustotal.votes_malicious"] = votes.get("malicious", 0)
-
-                tags = attributes.get("tags") or []
-                data["virustotal.tags"] = "|".join(str(t) for t in tags)
-                return data
-            case 404:
-                logger.info("virustotal: %s not found", ip)
-                return {"virustotal.status": "not_found"}
-            case 429:
-                logger.warning("VirusTotal rate limit exceeded")
-                return {"virustotal.status": "rate_limited"}
-            case 401 | 403:
-                logger.error("VirusTotal authentication failed - check API key")
-                return {"virustotal.status": "auth_failed"}
-            case _:
-                logger.warning("VirusTotal returned HTTP %s", r.status_code)
-                _backoff(attempt)
-
-    return data
+    return {
+        "virustotal.harmless": stats.get("harmless", 0),
+        "virustotal.malicious": stats.get("malicious", 0),
+        "virustotal.suspicious": stats.get("suspicious", 0),
+        "virustotal.undetected": stats.get("undetected", 0),
+        "virustotal.timeout": stats.get("timeout", 0),
+        "virustotal.asn": attributes.get("asn"),
+        "virustotal.as_owner": attributes.get("as_owner"),
+        "virustotal.country": attributes.get("country"),
+        "virustotal.continent": attributes.get("continent"),
+        "virustotal.network": attributes.get("network"),
+        "virustotal.rir": attributes.get("regional_internet_registry"),
+        "virustotal.reputation": attributes.get("reputation", 0),
+        "virustotal.jarm": attributes.get("jarm"),
+        "virustotal.last_analysis_date": attributes.get("last_analysis_date"),
+        "virustotal.whois_date": attributes.get("whois_date"),
+        "virustotal.votes_harmless": votes.get("harmless", 0),
+        "virustotal.votes_malicious": votes.get("malicious", 0),
+        "virustotal.tags": "|".join(str(t) for t in attributes.get("tags") or []),
+    }
 
 
 def ping(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
@@ -827,7 +789,7 @@ def query_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         """Run one service, recording failures rather than raising."""
         try:
             data.update(fn(*args))
-        except Exception as e:  # noqa: BLE001 - one bad service must not stop the rest
+        except Exception as e:  # one bad service must not stop the rest
             logger.warning("%s(%s): %s", name, ip, e)
             data[f"{name}.error"] = str(e)
 
@@ -847,7 +809,7 @@ def query_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         if config.timezone.enabled:
             try:
                 data["timezone.name"] = timezone_at(config, lat, lng)
-            except Exception as e:  # noqa: BLE001
+            except Exception as e:
                 logger.warning("timezone(%s): %s", ip, e)
                 data["timezone.error"] = str(e)
     elif config.geonames.enabled or config.timezone.enabled:

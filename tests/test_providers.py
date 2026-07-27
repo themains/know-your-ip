@@ -103,15 +103,27 @@ class TestVirusTotal:
         assert "virustotal.categories" not in virustotal_api(config, "8.8.8.8")
 
     @responses.activate
-    def test_rate_limit_reported_without_retry_storm(self, config):
-        """A 429 returns immediately rather than burning the retry budget."""
+    def test_persistent_rate_limit_is_reported(self, config):
+        """429 is retried with backoff, then reported.
+
+        The transport honors Retry-After and backs off, so a transient 429
+        recovers; only a persistent one surfaces as rate_limited.
+        """
         config.virustotal.api_key = "k"
         responses.add(responses.GET, VT_URL, json={}, status=429)
 
         out = virustotal_api(config, "8.8.8.8")
 
         assert out == {"virustotal.status": "rate_limited"}
-        assert len(responses.calls) == 1
+        assert len(responses.calls) == 5
+
+    @responses.activate
+    def test_transient_rate_limit_recovers(self, config):
+        config.virustotal.api_key = "k"
+        responses.add(responses.GET, VT_URL, json={}, status=429)
+        responses.add(responses.GET, VT_URL, json=VT_PAYLOAD, status=200)
+
+        assert virustotal_api(config, "8.8.8.8")["virustotal.reputation"] == 530
 
     @responses.activate
     def test_auth_failure_does_not_retry(self, config):

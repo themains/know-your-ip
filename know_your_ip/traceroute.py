@@ -15,7 +15,7 @@ DEFAULT_TIMEOUT = 120
 
 
 def os_traceroute(ip: str, max_hops: int = 30, timeout: int = DEFAULT_TIMEOUT) -> str:
-    """Trace the network path to an IP address.
+    r"""Trace the network path to an IP address.
 
     Uses ``tracert`` on Windows and ``traceroute``/``traceroute6`` elsewhere.
 
@@ -48,7 +48,8 @@ def os_traceroute(ip: str, max_hops: int = 30, timeout: int = DEFAULT_TIMEOUT) -
         cmd = [binary, "-m", str(max_hops), "-n", "--", str(address)]
 
     try:
-        result = subprocess.run(
+        # Fixed argv list, no shell; the address is validated above.
+        result = subprocess.run(  # noqa: S603
             cmd,
             capture_output=True,
             text=True,

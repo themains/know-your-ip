@@ -124,4 +124,5 @@ class TestMain:
 
         main(["8.8.8.8", "-o", str(isolated / "out.csv"), "--log-file", str(log)])
 
-        assert log.exists() and log.read_text().strip()
+        assert log.exists()
+        assert log.read_text().strip()

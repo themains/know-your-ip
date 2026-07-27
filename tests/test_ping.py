@@ -109,7 +109,7 @@ class TestPingFlags:
 class TestTraceroute:
     def test_rejects_non_ip_input(self):
         """An unvalidated value would be passed through as extra arguments."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="Not a valid IP address"):
             os_traceroute("8.8.8.8 -w 99999")
 
     def test_uses_traceroute6_for_ipv6(self):

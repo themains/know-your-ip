@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A shared HTTP transport (`know_your_ip.http`). One pooled session replaces a
+  fresh TCP+TLS connection per lookup; retries use exponential backoff with
+  jitter and honor `Retry-After`; and each provider declares its published
+  allowance so requests are paced by a token bucket rather than fired until the
+  service returns 429. Six concurrent VirusTotal lookups on the free 4/min tier
+  now complete in ~30s with no rate-limit errors.
+- Failed calls return a value (`<service>.error` or `<service>.status`) instead
+  of an empty dict indistinguishable from "nothing found".
+
+### Changed
+
+- Versions are derived from git tags (hatchling + uv-dynamic-versioning); there
+  is no version string to bump.
+- Adopted the py-canon fleet standard for CI, docs, and release workflows, and
+  the stricter shared ruff/pyright/pydoclint configuration. Docs moved from
+  `docs/source/` to `docs/`.
+- Every provider now goes through the shared transport, removing about 110
+  lines of duplicated retry logic.
+- A 429 is retried with backoff rather than abandoned, so a transient rate
+  limit recovers instead of surfacing as a failure.
+
 ### Fixed
 
 - `query_ip()` returned only fields listed in `[output] columns`, which

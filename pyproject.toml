@@ -1,10 +1,9 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
 
 [project]
 name = "know_your_ip"
-version = "0.3.0"
 description = "Get data on IP addresses"
 readme = "README.md"
 license = "MIT"
@@ -35,6 +34,7 @@ dependencies = [
     "requests>=2.31",
     "pydantic>=2.0"
 ]
+dynamic = ["version"]
 
 [project.optional-dependencies]
 # Real optional features. timezonefinder ships wheels only for linux-x86_64 and
@@ -52,6 +52,9 @@ dev = [
     "pre-commit",
     "build",
     "twine",
+    "pyright>=1.1.390",
+    "pydoclint>=0.5",
+    "pytest>=8",
 ]
 test = [
     "pytest",
@@ -64,6 +67,7 @@ docs = [
     "furo",
     "sphinx-copybutton",
     "myst-parser",
+    "py-canon @ git+https://github.com/gojiplus/py-canon@v1",
 ]
 
 [project.urls]
@@ -87,30 +91,27 @@ line-length = 88
 target-version = "py311"
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "B",   # flake8-bugbear
-    "C4",  # flake8-comprehensions
-    "UP",  # pyupgrade
-]
-ignore = [
-    "E501",  # line too long, handled by black
-    "B008",  # do not perform function calls in argument defaults
-]
+external = ["DOC"]
+select = ["E", "W", "F", "I", "B", "C4", "UP", "N", "D", "S", "SIM", "T20", "PT", "RUF"]
+ignore = ["D203", "D213", "B008", "E501"]
 
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
+[tool.ruff.lint.pydocstyle]
+convention = "google"
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "D"]
+"docs/**" = ["D"]
+# Example scripts print their results; that is the point of them.
+"examples/**" = ["T20", "D"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q --strict-markers"
 testpaths = ["tests"]
 filterwarnings = ["error"]
+markers = [
+    "real_sleep: test asserts on real timing; do not stub sleep or rate limits",
+]
 
 [tool.deptry]
 # Exclude directories from scanning
@@ -133,13 +134,26 @@ per_rule_ignores = { "DEP002" = ["pandas"] }
 style = "google"
 arg-type-hints-in-docstring = false
 check-return-types = false
-exclude = "\\.venv|docs|dist"
+check-class-attributes = false
+allow-init-docstring = true
+exclude = '\.venv|tests|docs'
 
 [tool.codespell]
 # The presentation PDF is a binary artifact; scanning it yields only noise.
-skip = "*.pdf,*.lock,./docs/build,./.git,./dist"
+# Generated artifacts (Sphinx output, lockfiles, the presentation PDF)
+# yield only noise.
+skip = "*.pdf,*.lock,*/_build/*,*/.git/*,*/dist/*,*/.venv/*,*/htmlcov/*"
 
 [tool.pyright]
-# shodan and timezonefinder are optional extras imported lazily inside the
-# functions that need them; they are intentionally absent from a base install.
-reportMissingImports = "warning"
+include = ["know_your_ip"]
+typeCheckingMode = "standard"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.hatch.build.targets.wheel]
+packages = ["know_your_ip"]
+
+[tool.uv-dynamic-versioning]
+vcs = "git"
+style = "pep440"
