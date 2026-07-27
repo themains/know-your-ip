@@ -26,6 +26,8 @@ def cache(tmp_path):
 def config() -> KnowYourIPConfig:
     config = KnowYourIPConfig()
     config.maxmind.enabled = False
+    config.network.enabled = False
+    config.rdap.enabled = False
     config.virustotal.enabled = True
     config.virustotal.api_key = "k"
     return config

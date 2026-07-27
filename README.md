@@ -42,6 +42,13 @@ know_your_ip 8.8.8.8 --all-columns
 
 Invalid addresses are reported and skipped rather than aborting the run.
 
+No key is needed for the first three. To use only those:
+
+```bash
+know_your_ip --file ips.csv --providers network,rdap -o out.csv
+know_your_ip --list-providers          # what is registered, and what each costs
+```
+
 ### Library
 
 ```python
@@ -116,6 +123,9 @@ Unrecognized `KNOW_YOUR_IP_*` variables produce a warning.
 
 | Service | Provides | Access |
 |---|---|---|
+| **Address classification** | Public/private/loopback/CGNAT, IP version, routability | None - offline |
+| **Reverse DNS** | PTR record | None |
+| **RDAP** | Registry, network name, allocation dates, abuse contact | None |
 | **MaxMind GeoLite2** | Country, city, lat/long, timezone | Free database; account + license key required to download |
 | **VirusTotal** | Reputation, per-engine analysis counts, ASN, JARM | Free tier: 500/day, 4/min |
 | **AbuseIPDB** | Abuse confidence, report categories, ISP, usage type | Free tier: 1,000 checks/day |
@@ -137,6 +147,33 @@ Registration: [VirusTotal](https://www.virustotal.com/gui/join-us) ·
 Anonymous GeoLite2 downloads ended in 2019. Create a free MaxMind account, get
 a license key, download `GeoLite2-City.mmdb`, and point `db_path` at the
 directory containing it.
+
+## Caching and repeated runs
+
+```bash
+know_your_ip --file ips.csv --cache ./obs.sqlite -o out.csv
+```
+
+Results are cached on disk, so re-running costs no API quota - which is what
+makes a 500/day free tier workable at research sample sizes. The cache is
+**append-only**: run the same address list monthly and it accumulates a panel
+dataset rather than overwriting itself.
+
+```python
+from know_your_ip.cache import Cache
+
+with Cache("obs.sqlite") as cache:
+    for row in cache.history("8.8.8.8"):
+        print(row["observed_at"], row["data"].get("virustotal.reputation"))
+```
+
+## Asking about the past
+
+`--as-of YYYY-MM-DD` asks what was true on a date. No provider supports it
+yet, and that is deliberate: providers which cannot answer historically are
+**skipped with a warning** rather than returning today's data under a
+historical label. As historical sources land they will honor the same
+contract.
 
 ## Working with pandas
 

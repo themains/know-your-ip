@@ -351,6 +351,8 @@ class TestQueryIP:
         """Without MaxMind there is no lat/lng; this used to raise NameError
         on an unbound local and be swallowed."""
         config.maxmind.enabled = False
+        config.network.enabled = False
+        config.rdap.enabled = False
         config.geonames.enabled = True
         config.timezone.enabled = True
 

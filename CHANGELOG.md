@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Two keyless providers, so the package is useful with **no API keys at all**:
+  - `network` classifies an address offline (public, private, loopback,
+    link-local, multicast, reserved, CGNAT) and resolves its PTR record.
+    Knowing which addresses are not globally routable lets a caller skip them
+    before spending metered quota - real research data is full of RFC1918.
+  - `rdap` queries the responsible registry over RDAP, the IETF successor to
+    port-43 WHOIS, routed via IANA's bootstrap registry. Returns the network
+    handle and name, allocation and last-changed dates, and an abuse contact.
+    Non-routable addresses are reported as such rather than queried.
+  Both are on by default. Note that RIRs differ in what they populate: APNIC
+  fills the top-level `country`, ARIN does not.
 - A provider registry. Each source is described once - its cost, whether it
   needs a key, whether it can answer historically - rather than as another
   `if config.x.enabled:` branch. `--list-providers` shows the table, and
