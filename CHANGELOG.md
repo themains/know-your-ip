@@ -5,6 +5,27 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A provider registry. Each source is described once - its cost, whether it
+  needs a key, whether it can answer historically - rather than as another
+  `if config.x.enabled:` branch. `--list-providers` shows the table, and
+  `--providers a,b` runs a chosen set without editing configuration.
+- An `as_of` parameter on `query_ip` and `--as-of` on the command line. No
+  provider honors it yet; those that cannot are **skipped with a warning**
+  rather than answering a question about 2019 with today's data. The contract
+  exists first so every provider added later inherits it.
+- An append-only SQLite cache (`--cache`, `--max-age`). Re-running an analysis
+  costs no API quota, which is what makes a 500/day free tier usable at
+  research sample sizes. Because rows are appended rather than replaced,
+  repeated runs over a fixed address list accumulate a panel dataset:
+  `Cache.history(ip)` returns the observations in order.
+- Cache keys include a fingerprint of the settings that affect the answer, so
+  a result fetched with AbuseIPDB's 30-day window cannot satisfy a request for
+  365 days.
+
 ## [0.3.0] - 2026-07-27
 
 ### Added
