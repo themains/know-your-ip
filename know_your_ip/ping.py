@@ -18,28 +18,24 @@ import logging
 import platform
 import re
 import subprocess
-import sys
+
+logger = logging.getLogger(__name__)
 
 
 def quiet_ping(
     hostname: str,
     timeout: int = 3000,
     count: int = 3,
-    numDataBytes: int = 64,
-    path_finder: bool = False,
     ipv6: bool = False,
 ) -> tuple[float, float, float, float] | None:
     """Ping a host and return statistics.
 
-    Uses system ping command for reliable cross-platform operation.
-    No root privileges required.
+    Uses the system ping command, so no elevated privileges are required.
 
     Args:
         hostname: IP address or hostname to ping.
         timeout: Timeout in milliseconds.
         count: Number of ping packets to send.
-        numDataBytes: Size of ping data in bytes (legacy parameter, ignored).
-        path_finder: Legacy parameter, ignored.
         ipv6: Use IPv6 ping if True.
 
     Returns:
@@ -65,9 +61,15 @@ def quiet_ping(
                     cmd.append("-6")
                 cmd.extend(["-n", str(count), "-w", str(timeout), hostname])
 
-            case "darwin" | "linux" | _:  # macOS, Linux, or other Unix-like
+            case "darwin":
+                # macOS ping takes -W in MILLISECONDS, unlike Linux, where the
+                # same flag is seconds. Passing seconds here yields a 3ms
+                # deadline and every probe times out.
                 cmd = ["ping6" if ipv6 else "ping"]
-                # Convert timeout from milliseconds to seconds
+                cmd.extend(["-c", str(count), "-W", str(max(1, timeout)), hostname])
+
+            case "linux" | _:  # Linux and other Unix-like
+                cmd = ["ping6" if ipv6 else "ping"]
                 timeout_sec = max(1, timeout // 1000)
                 cmd.extend(["-c", str(count), "-W", str(timeout_sec), hostname])
 
@@ -187,49 +189,3 @@ def _parse_unix_ping(output: str) -> tuple[float, float, float, float] | None:
     packet_loss = float(loss_match.group(1)) / 100 if loss_match else 0.0
 
     return max(times), min(times), sum(times) / len(times), packet_loss
-
-
-def verbose_ping(hostname: str, timeout: int = 3000, count: int = 3) -> int:
-    """Verbose ping with output to console.
-
-    Args:
-        hostname: IP address or hostname to ping.
-        timeout: Timeout in milliseconds.
-        count: Number of ping packets to send.
-
-    Returns:
-        0 if successful (received packets), 1 if failed.
-    """
-    result = quiet_ping(hostname, timeout, count)
-
-    if result is None:
-        print(f"PING {hostname}: Host unreachable")
-        return 1
-
-    max_time, min_time, avg_time, packet_loss = result
-    packets_lost = int(packet_loss * count)
-    packets_received = count - packets_lost
-
-    print(
-        f"PING {hostname}: {count} packets transmitted, {packets_received} received, "
-        f"{packet_loss * 100:.1f}% packet loss"
-    )
-
-    if packets_received > 0:
-        print(
-            f"round-trip min/avg/max = {min_time:.3f}/{avg_time:.3f}/{max_time:.3f} ms"
-        )
-        return 0
-    else:
-        return 1
-
-
-if __name__ == "__main__":
-    """Simple CLI for testing purposes."""
-    if len(sys.argv) != 2:
-        print("Usage: python ping.py <hostname>")
-        sys.exit(1)
-
-    hostname = sys.argv[1]
-    result = verbose_ping(hostname)
-    sys.exit(result)

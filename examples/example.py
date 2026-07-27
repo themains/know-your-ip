@@ -1,84 +1,77 @@
 #!/usr/bin/env python
 
+"""Query one IP address against each service that is enabled in the config.
+
+Copy ``examples/know_your_ip.toml`` to ``know_your_ip.toml`` in the working
+directory, add your API keys, and set ``enabled = true`` for the services you
+want. Services that are disabled or missing a key are skipped.
+"""
+
 from pprint import pprint
 
 from know_your_ip import (
     abuseipdb_api,
-    abuseipdb_web,
+    apivoid_api,
     censys_api,
     geonames_timezone,
-    ipvoid_scan,
     load_config,
     maxmind_geocode_ip,
     ping,
+    query_ip,
     shodan_api,
+    timezone_at,
     traceroute,
-    tzwhere_timezone,
     virustotal_api,
 )
 
+IP = "8.8.8.8"
+
+
+def main() -> None:
+    """Run each service individually, then run them all together."""
+    config = load_config()
+
+    lat = lng = None
+
+    if config.maxmind.enabled:
+        print("\n--- MaxMind ---")
+        result = maxmind_geocode_ip(config, IP)
+        pprint(result)
+        lat = result.get("maxmind.location.latitude")
+        lng = result.get("maxmind.location.longitude")
+
+    if lat is not None and lng is not None:
+        if config.geonames.enabled:
+            print("\n--- GeoNames (timezone from lat/lng) ---")
+            pprint(geonames_timezone(config, lat, lng))
+
+        if config.timezone.enabled:
+            print("\n--- Offline timezone ---")
+            pprint(timezone_at(config, lat, lng))
+
+    for label, enabled, fn in [
+        ("AbuseIPDB", config.abuseipdb.enabled, abuseipdb_api),
+        ("APIVoid", config.apivoid.enabled, apivoid_api),
+        ("Censys", config.censys.enabled, censys_api),
+        ("Shodan", config.shodan.enabled, shodan_api),
+        ("VirusTotal", config.virustotal.enabled, virustotal_api),
+    ]:
+        if enabled:
+            print(f"\n--- {label} ---")
+            pprint(fn(config, IP))
+
+    if config.ping.enabled:
+        print("\n--- Ping ---")
+        pprint(ping(config, IP))
+
+    if config.traceroute.enabled:
+        print("\n--- Traceroute ---")
+        pprint(traceroute(config, IP))
+
+    # query_ip runs every enabled service and returns the full record.
+    print("\n--- query_ip (everything at once) ---")
+    pprint(query_ip(config, IP))
+
+
 if __name__ == "__main__":
-    # load configuration from file (default: 'know_your_ip.cfg')
-    args = load_config()
-
-    # target IP
-    ip = "222.186.30.49"
-
-    # Maxmind API
-    print("Maxmind...")
-    result = maxmind_geocode_ip(args, ip)
-    pprint(result)
-
-    # Get lat/long
-    lat = result["maxmind.location.latitude"]
-    lng = result["maxmind.location.longitude"]
-
-    # Timezone from lat/lng
-    print("Geonames...")
-    result = geonames_timezone(args, lat, lng)
-    pprint(result)
-
-    # Timezone from lat/lng (offline)
-    print("Tzwhere...")
-    result = tzwhere_timezone(args, lat, lng)
-    pprint(result)
-
-    # abuseipdb web search
-    print("AbuseIPDB (Web)...")
-    result = abuseipdb_web(args, ip)
-    pprint(result)
-
-    # abuseipdb API
-    print("AbuseIPDB (API)...")
-    result = abuseipdb_api(args, ip)
-    pprint(result)
-
-    # ipvoid.com
-    print("IPvoid...")
-    result = ipvoid_scan(args, ip)
-    pprint(result)
-
-    # censys API
-    print("Census API...")
-    result = censys_api(args, ip)
-    pprint(result)
-
-    # shodan API
-    print("Shodan API...")
-    result = shodan_api(args, ip)
-    pprint(result)
-
-    # virustotal API
-    print("Virustotal API...")
-    result = virustotal_api(args, ip)
-    pprint(result)
-
-    # ping
-    print("Ping...")
-    result = ping(args, ip)
-    pprint(result)
-
-    # traceroute
-    print("Traceroute...")
-    result = traceroute(args, ip)
-    pprint(result)
+    main()

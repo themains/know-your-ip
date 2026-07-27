@@ -1,0 +1,93 @@
+# Know Your IP configuration
+# See https://github.com/themains/know-your-ip
+
+[maxmind]
+enabled = true
+db_path = "./db"
+
+[geonames]
+enabled = false
+# username = "your_value_here"  # Register at https://www.geonames.org/login
+
+[abuseipdb]
+enabled = false
+# api_key = "your_value_here"  # Register at https://www.abuseipdb.com/register
+days = 180
+
+[ping]
+enabled = false
+timeout = 3000
+count = 3
+
+[traceroute]
+enabled = false
+max_hops = 30
+
+[timezone]
+enabled = false
+
+[apivoid]
+enabled = false
+# api_key = "your_value_here"  # Register at https://app.apivoid.com/register
+
+[censys]
+enabled = false
+api_url = "https://api.platform.censys.io"
+# api_key = "your_value_here"  # Register at https://platform.censys.io/
+# organization_id = "your_value_here"  # Register at https://platform.censys.io/
+
+[shodan]
+enabled = false
+# api_key = "your_value_here"  # Register at https://account.shodan.io/register
+
+[virustotal]
+enabled = false
+# api_key = "your_value_here"  # Register at https://www.virustotal.com/gui/join-us
+
+[output]
+columns = [
+    "ip",
+    "maxmind.continent.names.en",
+    "maxmind.country.names.en",
+    "maxmind.city.names.en",
+    "maxmind.location.latitude",
+    "maxmind.location.longitude",
+    "maxmind.location.time_zone",
+    "maxmind.postal.code",
+    "maxmind.registered_country.names.en",
+    "timezone.name",
+    "abuseipdb.abuse_confidence_score",
+    "abuseipdb.categories",
+    "abuseipdb.country_code",
+    "abuseipdb.isp",
+    "abuseipdb.usage_type",
+    "abuseipdb.total_reports",
+    "abuseipdb.is_tor",
+    "virustotal.harmless",
+    "virustotal.malicious",
+    "virustotal.suspicious",
+    "virustotal.reputation",
+    "virustotal.asn",
+    "virustotal.as_owner",
+    "virustotal.country",
+    "virustotal.network",
+    "virustotal.rir",
+    "virustotal.tags",
+    "censys.asn",
+    "censys.as_name",
+    "censys.country",
+    "censys.city",
+    "censys.ports",
+    "apivoid.anonymity.is_hosting",
+    "apivoid.anonymity.is_proxy",
+    "apivoid.anonymity.is_tor",
+    "apivoid.anonymity.is_vpn",
+    "apivoid.anonymity.is_webproxy",
+    "apivoid.blacklists.detection_rate",
+    "apivoid.blacklists.detections",
+    "shodan.asn",
+    "shodan.isp",
+    "shodan.vulns",
+    "shodan.os",
+    "shodan.ports",
+]

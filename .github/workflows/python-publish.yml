@@ -30,13 +30,16 @@ jobs:
 
     - name: Install dependencies and build
       run: |
-        uv sync --extra dev
+        uv sync --group dev
         uv build
 
     - name: Lint with ruff
       run: |
         uv run ruff check .
         uv run ruff format --check .
+
+    - name: Test with pytest
+      run: uv run pytest --cov=know_your_ip --cov-fail-under=80
 
     - name: Publish package
       uses: pypa/gh-action-pypi-publish@release/v1

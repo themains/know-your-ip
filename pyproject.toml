@@ -4,15 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "know_your_ip"
-version = "0.2.1"
+version = "0.3.0"
 description = "Get data on IP addresses"
 readme = "README.md"
 license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "Suriyan Laohaprapanon", email = "suriyant@gmail.com"},
     {name = "Gaurav Sood", email = "gsood07@gmail.com"}
 ]
-keywords = ["ip", "geoip", "ipvoid", "abuseip", "shodan", "virustotal", "blacklisted", "geolocation", "cybersecurity"]
+keywords = ["ip", "geoip", "geolocation", "abuseipdb", "virustotal", "shodan", "censys", "threat-intelligence", "ip-reputation", "network-measurement"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -30,34 +31,39 @@ classifiers = [
 ]
 requires-python = ">=3.11"
 dependencies = [
-    "geoip2",
-    "tzwhere",
-    "BeautifulSoup4",
-    "lxml",
-    "shodan",
-    "requests",
+    "maxminddb>=3.0",
+    "requests>=2.31",
     "pydantic>=2.0"
 ]
 
 [project.optional-dependencies]
+# Real optional features. timezonefinder ships wheels only for linux-x86_64 and
+# is ~55MB; every other platform builds it from source. MaxMind's City database
+# already reports location.time_zone, so this is an opt-in cross-check.
+timezone = ["timezonefinder>=6.0"]
+shodan = ["shodan>=1.31"]
+pandas = ["pandas>=2.0"]
+
+[dependency-groups]
 dev = [
+    {include-group = "test"},
+    {include-group = "docs"},
     "ruff",
-    "pytest",
-    "pytest-cov",
     "pre-commit",
     "build",
-    "twine"
+    "twine",
 ]
 test = [
     "pytest",
     "pytest-cov",
-    "pytest-mock"
+    "pytest-mock",
+    "responses>=0.25",
 ]
 docs = [
     "sphinx>=7.0",
     "furo",
     "sphinx-copybutton",
-    "myst-parser"
+    "myst-parser",
 ]
 
 [project.urls]
@@ -67,12 +73,14 @@ Documentation = "https://themains.github.io/know-your-ip/"
 "Bug Tracker" = "https://github.com/themains/know-your-ip/issues"
 
 [project.scripts]
-know_your_ip = "know_your_ip.know_your_ip:main"
+know_your_ip = "know_your_ip.core:main"
 
 [tool.setuptools]
 packages = ["know_your_ip"]
 
-# No package data files needed - using embedded category mappings
+# PEP 561 marker so type checkers trust the package's inline annotations.
+[tool.setuptools.package-data]
+know_your_ip = ["py.typed"]
 
 [tool.ruff]
 line-length = 88
@@ -102,6 +110,7 @@ indent-style = "space"
 minversion = "6.0"
 addopts = "-ra -q --strict-markers"
 testpaths = ["tests"]
+filterwarnings = ["error"]
 
 [tool.deptry]
 # Exclude directories from scanning
@@ -113,11 +122,24 @@ extend_exclude = [
     "docs"
 ]
 
-# Map package names to module names for correct detection
-package_module_name_map = { "BeautifulSoup4" = "bs4" }
-
 # Development dependency groups to ignore for unused dependency checks
-pep621_dev_dependency_groups = ["dev", "test", "docs"]
+pep621_dev_dependency_groups = []
 
-# Ignore lxml - used indirectly by BeautifulSoup as XML parser
-per_rule_ignores = { "DEP002" = ["lxml"] }
+# pandas is an opt-in extra for users who want DataFrame output; the package
+# itself never imports it.
+per_rule_ignores = { "DEP002" = ["pandas"] }
+
+[tool.pydoclint]
+style = "google"
+arg-type-hints-in-docstring = false
+check-return-types = false
+exclude = "\\.venv|docs|dist"
+
+[tool.codespell]
+# The presentation PDF is a binary artifact; scanning it yields only noise.
+skip = "*.pdf,*.lock,./docs/build,./.git,./dist"
+
+[tool.pyright]
+# shodan and timezonefinder are optional extras imported lazily inside the
+# functions that need them; they are intentionally absent from a base install.
+reportMissingImports = "warning"

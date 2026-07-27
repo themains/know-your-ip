@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "know_your_ip: Comprehensive IP Address Enrichment"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - family-names: Laohaprapanon
+    given-names: Suriyan
+  - family-names: Sood
+    given-names: Gaurav
+    email: gsood07@gmail.com
+repository-code: "https://github.com/themains/know-your-ip"
+url: "https://themains.github.io/know-your-ip/"
+abstract: >-
+  A Python package for enriching IP addresses with geolocation, abuse
+  reputation, exposed-service, and network-path data from multiple sources,
+  designed for batch processing of large address lists.
+keywords:
+  - ip-address
+  - geolocation
+  - geoip
+  - threat-intelligence
+  - reputation
+  - network-measurement
+license: MIT
