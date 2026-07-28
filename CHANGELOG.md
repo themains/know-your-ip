@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `know_your_ip download-db` fetches the GeoLite2 City and ASN databases with a
+  free MaxMind account ID and license key, into the user cache directory where
+  the package finds them with no further configuration. MaxMind is the default
+  geolocation source but has needed an account since 2019, and nothing in the
+  package previously helped obtain it — so the flagship provider failed on
+  every fresh install.
+  The archive is extracted one validated member at a time rather than with
+  `extractall`: member paths come from a remote server, tar path traversal is a
+  real attack, and the `filter=` default differs across the Python versions
+  supported here. Redirects are followed, since MaxMind moved downloads to
+  Cloudflare R2 in January 2024.
+
 - Censys now captures the response it was already paying for. One host request
   returns ~31 KB across seven sections and the parser kept eight fields; it now
   keeps thirty, including:
@@ -66,6 +78,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Provider failures are logged once per distinct error rather than once per
+  address, with a summary line at the end of the run giving the affected count.
+  A misconfiguration fails identically for every address, so a 10,000-row job
+  previously produced 10,000 identical lines — the first thing a new user saw.
+  Every record still carries `<provider>.error`; only the logging is collapsed,
+  never the data.
 - `censys.protocols` is split into `censys.transport_protocols` (`tcp`, `udp`,
   `quic` - lowercase, as the API returns them) and `censys.services` (the
   application protocol: `DNS`, `HTTP`). The old name held transport values

@@ -144,9 +144,23 @@ Registration: [VirusTotal](https://www.virustotal.com/gui/join-us) ·
 
 ### MaxMind database
 
-Anonymous GeoLite2 downloads ended in 2019. Create a free MaxMind account, get
-a license key, download `GeoLite2-City.mmdb`, and point `db_path` at the
-directory containing it.
+Anonymous GeoLite2 downloads ended in 2019, so a free account is required. Once
+you have an account ID and license key:
+
+```bash
+know_your_ip download-db --account-id YOUR_ID --license-key YOUR_KEY
+```
+
+This fetches the City and ASN databases into your cache directory, where the
+package finds them without further configuration. Credentials can also come
+from `MAXMIND_ACCOUNT_ID` and `MAXMIND_LICENSE_KEY`.
+
+Set `[maxmind] db_path` instead if you manage the database yourself; a database
+there takes precedence over the downloaded copy.
+
+GeoLite2 accounts allow 30 downloads per 24 hours, and the licence requires
+deleting outdated copies within 30 days — so don't archive old builds to do
+historical geolocation.
 
 ## Caching and repeated runs
 
