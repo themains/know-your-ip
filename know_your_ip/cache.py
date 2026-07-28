@@ -262,16 +262,30 @@ class Cache:
         self.close()
 
 
-def default_cache_path() -> Path:
-    """Where the cache lives when the caller does not choose.
+def user_cache_dir() -> Path:
+    """The directory this package keeps downloaded and cached data in.
+
+    Honors ``XDG_CACHE_HOME`` and otherwise falls back to ``~/.cache``. Kept
+    here rather than pulling in ``platformdirs``: the base install is
+    deliberately three dependencies.
 
     Returns:
-        A path under the user's cache directory.
+        The cache directory. Not created.
     """
     import os
 
-    if xdg := os.environ.get("XDG_CACHE_HOME"):
-        base = Path(xdg)
-    else:
-        base = Path.home() / ".cache"
-    return base / "know-your-ip" / "observations.sqlite"
+    base = (
+        Path(os.environ["XDG_CACHE_HOME"])
+        if os.environ.get("XDG_CACHE_HOME")
+        else Path.home() / ".cache"
+    )
+    return base / "know-your-ip"
+
+
+def default_cache_path() -> Path:
+    """Where the observation cache lives when the caller does not choose.
+
+    Returns:
+        A path under :func:`user_cache_dir`.
+    """
+    return user_cache_dir() / "observations.sqlite"

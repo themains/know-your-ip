@@ -7,8 +7,10 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import logging
+import os
 import re
 import sys
+import threading
 from csv import DictWriter
 from datetime import date, timedelta
 from functools import partial
@@ -22,6 +24,7 @@ from . import http
 from .cache import Cache, config_fingerprint, default_cache_path
 from .config import KnowYourIPConfig
 from .config import load_config as load_modern_config
+from .maxmind_db import download_all, find_database
 from .ping import quiet_ping
 from .providers import REGISTRY, Provider, build_default_registry
 from .traceroute import os_traceroute
@@ -265,12 +268,16 @@ def maxmind_geocode_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
         anonymous downloads ended in 2019.
     """
     ip = validate_ip(ip)
-    db_file = config.maxmind.db_path / "GeoLite2-City.mmdb"
+    # Falls back to a database fetched by `know_your_ip download-db`, so that
+    # downloading then running needs no further configuration.
+    db_file = find_database(config.maxmind.db_path)
     if not db_file.exists():
         raise FileNotFoundError(
-            f"MaxMind database not found at {db_file}. Download GeoLite2-City "
-            "from https://www.maxmind.com/en/accounts/current/geoip/downloads "
-            "and set [maxmind] db_path in your configuration."
+            f"MaxMind database not found at {db_file}. Run "
+            "'know_your_ip download-db --account-id ID --license-key KEY' "
+            "(free account at https://www.maxmind.com/en/geolite2/signup), "
+            "or set [maxmind] db_path to a directory containing "
+            "GeoLite2-City.mmdb."
         )
 
     record = _maxmind_reader(db_file).get(ip)
@@ -935,7 +942,7 @@ def query_ip(
             try:
                 data["timezone.name"] = timezone_at(config, lat, lng)
             except Exception as e:
-                logger.warning("timezone(%s): %s", ip, e)
+                _report_provider_failure("timezone", ip, str(e))
                 data["timezone.error"] = str(e)
     elif coordinate_providers or config.timezone.enabled:
         logger.info(
@@ -945,6 +952,73 @@ def query_ip(
         )
 
     return data
+
+
+class _FailureTally:
+    """Counts identical provider failures so they are logged once, not per address.
+
+    A misconfiguration - a missing MaxMind database, an invalid key - fails the
+    same way for every address in a batch. Logging it per address turns a
+    10,000-row job into 10,000 identical lines and buries anything else. The
+    per-record ``<provider>.error`` field is unaffected: only the logging is
+    collapsed, never the data.
+    """
+
+    def __init__(self) -> None:
+        """Start with no failures recorded."""
+        self._counts: dict[tuple[str, str], int] = {}
+        self._lock = threading.Lock()
+
+    def record(self, provider: str, message: str) -> bool:
+        """Record a failure and say whether it is the first of its kind.
+
+        Args:
+            provider: Provider name.
+            message: The error text.
+
+        Returns:
+            True if this is the first occurrence, so the caller should log it
+            prominently.
+        """
+        key = (provider, message)
+        with self._lock:
+            first = key not in self._counts
+            self._counts[key] = self._counts.get(key, 0) + 1
+        return first
+
+    def summary(self) -> list[str]:
+        """Describe repeated failures, one line per distinct failure.
+
+        Returns:
+            Human-readable lines, empty if nothing failed more than once.
+        """
+        return [
+            f"{provider}: {count} addresses failed - {message}"
+            for (provider, message), count in sorted(self._counts.items())
+            if count > 1
+        ]
+
+    def reset(self) -> None:
+        """Forget every recorded failure."""
+        with self._lock:
+            self._counts.clear()
+
+
+FAILURES = _FailureTally()
+
+
+def _report_provider_failure(provider: str, ip: str, message: str) -> None:
+    """Log a provider failure, in full the first time and quietly after.
+
+    Args:
+        provider: Provider name.
+        ip: The address being queried.
+        message: The error text.
+    """
+    if FAILURES.record(provider, message):
+        logger.warning("%s(%s): %s", provider, ip, message)
+    else:
+        logger.debug("%s(%s): %s", provider, ip, message)
 
 
 def _run_provider(
@@ -990,7 +1064,7 @@ def _run_provider(
             else provider.fetch(config, *args)
         )
     except Exception as e:  # one bad provider must not stop the rest
-        logger.warning("%s(%s): %s", provider.name, ip, e)
+        _report_provider_failure(provider.name, ip, str(e))
         data[f"{provider.name}.error"] = str(e)
         return
 
@@ -1024,6 +1098,37 @@ def read_ip_file(path: Path) -> list[str]:
     ]
 
 
+def _download_databases(parser: argparse.ArgumentParser, args: Any) -> int:
+    """Fetch the MaxMind databases into the user cache directory.
+
+    Args:
+        parser: The argument parser, used to report usage errors.
+        args: Parsed arguments carrying the MaxMind credentials.
+
+    Returns:
+        Process exit status.
+    """
+    account_id = args.account_id or os.environ.get("MAXMIND_ACCOUNT_ID")
+    license_key = args.license_key or os.environ.get("MAXMIND_LICENSE_KEY")
+
+    if not account_id or not license_key:
+        parser.error(
+            "download-db needs --account-id and --license-key (or the "
+            "MAXMIND_ACCOUNT_ID and MAXMIND_LICENSE_KEY environment "
+            "variables). Both come free from "
+            "https://www.maxmind.com/en/geolite2/signup"
+        )
+
+    written = download_all(account_id, license_key)
+    if not written:
+        logger.error("No databases were downloaded")
+        return 1
+
+    for path in written:
+        sys.stdout.write(f"{path}\n")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point for the ``know_your_ip`` command.
 
@@ -1037,7 +1142,12 @@ def main(argv: list[str] | None = None) -> int:
         prog="know_your_ip",
         description="Know Your IP - comprehensive IP address analysis",
     )
-    parser.add_argument("ip", nargs="*", help="IP address(es) to analyze")
+    parser.add_argument(
+        "ip",
+        nargs="*",
+        help="IP address(es) to analyze, or the literal 'download-db' to fetch "
+        "the MaxMind databases",
+    )
     parser.add_argument("-f", "--file", help="File listing IP addresses")
     parser.add_argument("-c", "--config", help="Configuration file (TOML format)")
     parser.add_argument("-o", "--output", default="output.csv", help="Output CSV file")
@@ -1074,6 +1184,15 @@ def main(argv: list[str] | None = None) -> int:
         help="Refetch cached entries older than this many hours",
     )
     parser.add_argument(
+        "--account-id",
+        help="MaxMind account ID, for download-db",
+    )
+    parser.add_argument(
+        "--license-key",
+        help="MaxMind license key, for download-db. GeoLite2 allows 30 "
+        "downloads per 24 hours",
+    )
+    parser.add_argument(
         "--list-providers",
         action="store_true",
         help="List registered providers and exit",
@@ -1090,6 +1209,9 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
     setup_logger(args.verbose, Path(args.log_file) if args.log_file else None)
+
+    if args.ip and args.ip[0] == "download-db":
+        return _download_databases(parser, args)
 
     if args.list_providers:
         for provider in REGISTRY.providers:
@@ -1212,6 +1334,8 @@ def _write_results(args: argparse.Namespace, ips: list[str], query: Any) -> int:
                 pool.terminate()
                 return 130
 
+    for line in FAILURES.summary():
+        logger.warning("%s", line)
     logger.info("Wrote %s", args.output)
     return 0
 
