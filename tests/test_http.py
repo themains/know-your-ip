@@ -150,7 +150,7 @@ class TestRequest:
         )
         responses.add(responses.GET, URL, json={}, status=200)
 
-        with mock.patch("know_your_ip.http.time.sleep") as sleep:
+        with mock.patch("know_your_ip.http._sleep") as sleep:
             request("p", "GET", URL)
 
         assert sleep.call_args_list[0].args[0] == 7.0
@@ -163,13 +163,13 @@ class TestRequest:
         )
         responses.add(responses.GET, URL, json={}, status=200)
 
-        with mock.patch("know_your_ip.http.time.sleep") as sleep:
+        with mock.patch("know_your_ip.http._sleep") as sleep:
             request("p", "GET", URL)
 
         assert sleep.call_args_list[0].args[0] == 300.0
 
     @responses.activate
-    def test_ignores_unparseable_retry_after(self):
+    def test_ignores_unparsable_retry_after(self):
         """Retry-After may be an HTTP date; fall back to backoff, don't crash."""
         responses.add(
             responses.GET,
@@ -188,7 +188,7 @@ class TestRequest:
     def test_backoff_grows_and_is_jittered(self):
         responses.add(responses.GET, URL, json={}, status=500)
 
-        with mock.patch("know_your_ip.http.time.sleep") as sleep:
+        with mock.patch("know_your_ip.http._sleep") as sleep:
             request("p", "GET", URL, max_attempts=4)
 
         delays = [c.args[0] for c in sleep.call_args_list]

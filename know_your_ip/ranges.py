@@ -19,6 +19,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -130,6 +131,22 @@ PARSERS = {
 }
 
 
+def _bucket_key(address: Any) -> int:
+    """Bucket key for an address, disjoint across families.
+
+    Args:
+        address: An IPv4Address or IPv6Address.
+
+    Returns:
+        A non-negative key for IPv4 (its first byte) and a negative one for
+        IPv6 (its first two bytes), so the two families never collide.
+    """
+    packed = address.packed
+    if address.version == 6:
+        return -((packed[0] << 8) | packed[1]) - 1
+    return packed[0]
+
+
 class RangeIndex:
     """Membership lookup over many networks.
 
@@ -161,7 +178,7 @@ class RangeIndex:
             try:
                 network = ipaddress.ip_network(cidr, strict=False)
             except ValueError:
-                logger.debug("%s: skipping unparseable range %r", source, cidr)
+                logger.debug("%s: skipping unparsable range %r", source, cidr)
                 continue
             self._buckets.setdefault(self._bucket(network), []).append(
                 (network, source, kind)
@@ -178,9 +195,14 @@ class RangeIndex:
         IPv6 shares one bucket: the published v6 ranges are few enough that
         splitting them buys nothing.
         """
-        if network.version == 6:
-            return -1
-        return int(str(network.network_address).split(".", 1)[0])
+        # Bucket on the first byte of the packed address, which works for both
+        # families. Lumping all of IPv6 into one bucket reintroduces exactly
+        # the linear scan the bucketing exists to avoid.
+        return (
+            -network.network_address.packed[0] - 1
+            if network.version == 6
+            else (network.network_address.packed[0])
+        )
 
     def lookup(self, ip: str) -> list[tuple[str, str]]:
         """Find every source whose ranges contain an address.
@@ -192,7 +214,7 @@ class RangeIndex:
             ``(source, kind)`` pairs, possibly empty.
         """
         address = ipaddress.ip_address(ip)
-        key = -1 if address.version == 6 else int(str(address).split(".", 1)[0])
+        key = -address.packed[0] - 1 if address.version == 6 else address.packed[0]
         # Deduplicated: AWS publishes the same prefix once per service, so a
         # single address legitimately matches it many times.
         matches = {
@@ -251,6 +273,8 @@ def _fetch(source: RangeSource, ttl: int) -> str | None:
 
 
 _INDEX: RangeIndex | None = None
+_INDEX_TTL: int | None = None
+_INDEX_LOCK = threading.Lock()
 
 
 def build_index(
@@ -288,21 +312,31 @@ def get_index(ttl: int = DEFAULT_TTL_SECONDS) -> RangeIndex:
     """Return the process-wide index, building it on first use.
 
     Args:
-        ttl: Seconds a cached list stays usable.
+        ttl: Seconds a cached list stays usable. A different value than the
+            index was built with rebuilds it, so the setting is not silently
+            ignored after the first call.
 
     Returns:
         The shared index.
     """
-    global _INDEX
-    if _INDEX is None:
-        _INDEX = build_index(ttl)
-    return _INDEX
+    global _INDEX, _INDEX_TTL
+    # Double-checked locking: the batch path is threaded, and without this
+    # every worker builds its own index, each fetching every published list.
+    if _INDEX is not None and ttl == _INDEX_TTL:
+        return _INDEX
+    with _INDEX_LOCK:
+        if _INDEX is None or ttl != _INDEX_TTL:
+            _INDEX = build_index(ttl)
+            _INDEX_TTL = ttl
+        return _INDEX
 
 
 def reset_index() -> None:
     """Discard the cached index. Intended for tests."""
-    global _INDEX
-    _INDEX = None
+    global _INDEX, _INDEX_TTL
+    with _INDEX_LOCK:
+        _INDEX = None
+        _INDEX_TTL = None
 
 
 def range_lookup(config: Any, ip: str) -> dict[str, Any]:

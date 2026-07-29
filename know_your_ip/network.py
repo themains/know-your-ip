@@ -16,6 +16,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import socket
+import threading
 from typing import Any
 
 from . import http
@@ -32,6 +33,7 @@ BOOTSTRAP_URLS = {
 RDAP_RATE_LIMIT = http.RateLimit(requests=10, per_seconds=60)
 
 _BOOTSTRAP_CACHE: dict[int, list[tuple[list[str], list[str]]]] = {}
+_BOOTSTRAP_LOCK = threading.Lock()
 
 
 def classify_ip(ip: str) -> dict[str, Any]:
@@ -133,15 +135,23 @@ def _load_bootstrap(version: int) -> list[tuple[list[str], list[str]]]:
     if version in _BOOTSTRAP_CACHE:
         return _BOOTSTRAP_CACHE[version]
 
-    result = http.request("rdap-bootstrap", "GET", BOOTSTRAP_URLS[version])
-    if not result.ok:
-        logger.warning("rdap: could not fetch bootstrap registry for IPv%d", version)
-        return []
+    # Double-checked locking: enrichment is threaded, and without this every
+    # worker downloads the IANA registry on first use.
+    with _BOOTSTRAP_LOCK:
+        if version in _BOOTSTRAP_CACHE:
+            return _BOOTSTRAP_CACHE[version]
 
-    services = result.json().get("services", [])
-    entries = [(prefixes, urls) for prefixes, urls in services]
-    _BOOTSTRAP_CACHE[version] = entries
-    return entries
+        result = http.request("rdap-bootstrap", "GET", BOOTSTRAP_URLS[version])
+        if not result.ok:
+            logger.warning(
+                "rdap: could not fetch bootstrap registry for IPv%d", version
+            )
+            return []
+
+        services = result.json().get("services", [])
+        entries = [(prefixes, urls) for prefixes, urls in services]
+        _BOOTSTRAP_CACHE[version] = entries
+        return entries
 
 
 def rdap_service_for(ip: str) -> str | None:

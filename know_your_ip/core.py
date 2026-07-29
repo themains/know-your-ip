@@ -222,6 +222,7 @@ def load_config(config_file: str | Path | None = None) -> KnowYourIPConfig:
 
 
 _MAXMIND_READERS: dict[Path, Any] = {}
+_MAXMIND_LOCK = threading.Lock()
 
 
 def _maxmind_reader(db_file: Path) -> Any:
@@ -237,10 +238,18 @@ def _maxmind_reader(db_file: Path) -> Any:
         An open ``maxminddb`` reader.
     """
     reader = _MAXMIND_READERS.get(db_file)
-    if reader is None:
-        reader = maxminddb.open_database(db_file)
-        _MAXMIND_READERS[db_file] = reader
-    return reader
+    if reader is not None:
+        return reader
+
+    # Double-checked locking. Without it, concurrent first use opens the
+    # database once per worker and keeps only the last - the others are
+    # memory-mapped readers that are never closed.
+    with _MAXMIND_LOCK:
+        reader = _MAXMIND_READERS.get(db_file)
+        if reader is None:
+            reader = maxminddb.open_database(db_file)
+            _MAXMIND_READERS[db_file] = reader
+        return reader
 
 
 def maxmind_geocode_ip(config: KnowYourIPConfig, ip: str) -> dict[str, Any]:
@@ -1157,9 +1166,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--from", default=0, type=int, dest="from_row", help="From row")
     parser.add_argument("--to", default=0, type=int, help="To row (0 means all)")
     parser.add_argument(
+        "--shape",
+        choices=["canonical", "raw", "tidy"],
+        default="canonical",
+        help="Output shape: canonical joins each variable into one column "
+        "(default); raw keeps every vendor-shaped field; tidy is long form",
+    )
+    parser.add_argument(
         "--all-columns",
         action="store_true",
-        help="Write every collected field instead of [output] columns",
+        help="Deprecated alias for --shape raw",
     )
     parser.add_argument(
         "--providers",
@@ -1294,6 +1310,21 @@ def main(argv: list[str] | None = None) -> int:
             cache.close()
 
 
+def _union_columns(rows: list[dict[str, Any]]) -> list[str]:
+    """Every key across rows, in first-seen order.
+
+    Args:
+        rows: Records that may not share a shape.
+
+    Returns:
+        Ordered column names.
+    """
+    seen: dict[str, None] = {}
+    for row in rows:
+        seen.update(dict.fromkeys(row))
+    return list(seen)
+
+
 def _write_results(args: argparse.Namespace, ips: list[str], query: Any) -> int:
     """Run the query over every address and write the CSV.
 
@@ -1305,34 +1336,36 @@ def _write_results(args: argparse.Namespace, ips: list[str], query: Any) -> int:
     Returns:
         Process exit status.
     """
-    config = load_config(args.config)
-    with open(args.output, "w", newline="", encoding="utf-8") as fh:
-        writer: DictWriter | None = None
-        if not args.all_columns:
-            writer = DictWriter(
-                fh, fieldnames=config.output.columns, extrasaction="ignore"
-            )
-            if args.header:
-                writer.writeheader()
+    from .enrich import EnrichResult
 
-        with ThreadPool(processes=args.max_conn) as pool:
-            try:
-                for i, record in enumerate(pool.imap(query, ips), start=1):
-                    if writer is None:
-                        writer = DictWriter(
-                            fh, fieldnames=list(record), extrasaction="ignore"
-                        )
-                        if args.header:
-                            writer.writeheader()
-                    writer.writerow(record)
-                    if i % 100 == 0:
-                        logger.info("Processed %d/%d", i, len(ips))
-            except KeyboardInterrupt:
-                logger.warning(
-                    "Interrupted; partial results written to %s", args.output
-                )
-                pool.terminate()
-                return 130
+    shape = "raw" if args.all_columns else args.shape
+
+    records: list[dict[str, Any]] = []
+    with ThreadPool(processes=args.max_conn) as pool:
+        try:
+            for i, record in enumerate(pool.imap(query, ips), start=1):
+                records.append(record)
+                if i % 100 == 0:
+                    logger.info("Processed %d/%d", i, len(ips))
+        except KeyboardInterrupt:
+            logger.warning("Interrupted; writing partial results to %s", args.output)
+            pool.terminate()
+            EnrichResult(records=records).to_csv(args.output, shape=shape)
+            return 130
+
+    # Written through EnrichResult so the command line and the library cannot
+    # produce different tables from the same input.
+    result = EnrichResult(records=records)
+    rows = {
+        "canonical": result.canonical,
+        "raw": result.records,
+        "tidy": result.tidy(),
+    }[shape]
+    with open(args.output, "w", newline="", encoding="utf-8") as fh:
+        writer = DictWriter(fh, fieldnames=_union_columns(rows), extrasaction="ignore")
+        if args.header:
+            writer.writeheader()
+        writer.writerows(rows)
 
     for line in FAILURES.summary():
         logger.warning("%s", line)

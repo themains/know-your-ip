@@ -127,7 +127,7 @@ class TestIndex:
 
         assert index.lookup("2600:9000::1") == [("aws", "cloud")]
 
-    def test_unparseable_ranges_are_skipped_not_fatal(self):
+    def test_unparsable_ranges_are_skipped_not_fatal(self):
         """A publisher shipping one malformed entry must not break the run."""
         index = RangeIndex()
 

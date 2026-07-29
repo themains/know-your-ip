@@ -5,6 +5,53 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **The command line and the library produced different tables.** 0.6.0 made the
+  joined, canonical table the default - in the library only. The CLI kept
+  writing vendor-shaped columns, so the same input through the two entry points
+  overlapped on exactly one column: `ip`. Both now share one code path, and the
+  CLI takes `--shape canonical|raw|tidy`. The existing differential test missed
+  this because it passed `--all-columns`, comparing raw to raw and never
+  exercising the defaults.
+- **Three process-wide caches rebuilt under concurrency**, each reached from the
+  threaded batch path. Twelve threads built twelve range indexes, each fetching
+  all seven published lists - 84 requests where 7 were needed. The IANA RDAP
+  bootstrap was downloaded once per thread. Worst, every thread opened its own
+  memory-mapped MaxMind reader and only the last was retained, leaking the rest
+  in proportion to worker count. All three now use the same double-checked
+  locking as the HTTP session.
+- **`get_index` ignored its TTL after the first call**, so `ranges.ttl_seconds`
+  appeared to work and did nothing.
+- **Duplicate addresses were fetched twice.** Real address lists repeat, and
+  within a run neither copy is cached yet, so both hit the network and spent
+  quota. Unique addresses are fetched once and projected back, leaving row order
+  and row count unchanged.
+- **The run manifest keyed config by provider name rather than section.** The
+  two coincide today, so this was latent - but it would have silently produced a
+  wrong fingerprint, which is precisely the claim the manifest exists to support.
+- **Every IPv6 range shared one bucket**, so v6 lookups scanned linearly - the
+  quadratic behaviour the bucketing exists to prevent. Buckets are now keyed on
+  the first two bytes for v6, in a key space disjoint from v4.
+- `canonicalize`, `tidy`, and `range_lookup` are exported, and `schema` and
+  `ranges` appear in the API documentation. The join was reachable only through
+  `EnrichResult`.
+
+### Changed
+
+- `CANONICAL`'s field lists are documented as ordered most-authoritative-first,
+  because they are: ties are broken by list position. The behaviour was already
+  deterministic and defensible; the comment claiming the order was insignificant
+  was not.
+
+### Added
+
+- The shipped notebook is now **executed** in CI, not just parsed. The static
+  check catches a deleted symbol - which is how the notebook broke in 0.4.0 -
+  but a changed signature parses fine and only execution catches it.
+
 ## [0.6.0] - 2026-07-28
 
 ### Added
