@@ -16,6 +16,7 @@ import ast
 import csv
 import importlib
 import json
+import sys
 import tomllib
 from pathlib import Path
 
@@ -120,6 +121,15 @@ class TestExamplesActuallyRun:
     """
 
     @pytest.mark.network
+    @pytest.mark.skipif(
+        sys.platform == "win32",
+        reason=(
+            "Executing a notebook needs a ZMQ kernel subprocess, which hangs "
+            "rather than fails on Windows CI. The notebook's content is "
+            "platform-independent, so running it on POSIX catches the drift "
+            "this guards against."
+        ),
+    )
     @pytest.mark.parametrize("notebook", _notebooks(), ids=lambda p: p.name)
     def test_notebook_executes(self, notebook, tmp_path):
         nbformat = pytest.importorskip("nbformat")
@@ -128,10 +138,13 @@ class TestExamplesActuallyRun:
 
         parsed = nbformat.read(notebook, as_version=4)
         # Run in a scratch directory: the notebook writes a cache and a log,
-        # and neither belongs in the working tree.
+        # and neither belongs in the working tree. The per-cell timeout is
+        # deliberately short - a hung cell should fail the job, not occupy a
+        # runner until the workflow's own limit.
         nbclient.NotebookClient(
             parsed,
-            timeout=600,
+            timeout=120,
+            startup_timeout=60,
             kernel_name="python3",
             resources={"metadata": {"path": str(tmp_path)}},
         ).execute()
