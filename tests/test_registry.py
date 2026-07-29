@@ -118,6 +118,7 @@ class TestDefaultRegistry:
         assert names == {
             "network",
             "rdap",
+            "ranges",
             "maxmind",
             "abuseipdb",
             "virustotal",

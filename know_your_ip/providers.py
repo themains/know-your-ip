@@ -182,13 +182,19 @@ def build_default_registry() -> Registry:
     Returns:
         The populated registry.
     """
-    from . import core, network
+    from . import core, network, ranges
 
     for provider in [
         Provider(
             name="network",
             fetch=network.network_info,
             section="network",
+            cost="free",
+        ),
+        Provider(
+            name="ranges",
+            fetch=ranges.range_lookup,
+            section="ranges",
             cost="free",
         ),
         Provider(

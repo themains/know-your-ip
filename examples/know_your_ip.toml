@@ -34,6 +34,10 @@ dns_timeout = 5.0
 [rdap]
 enabled = true
 
+[ranges]
+enabled = true
+ttl_seconds = 86400
+
 [apivoid]
 enabled = false
 # api_key = "your_value_here"  # Register at https://app.apivoid.com/register

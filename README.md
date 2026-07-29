@@ -4,7 +4,7 @@
 [![CI](https://github.com/themains/know-your-ip/workflows/CI/badge.svg)](https://github.com/themains/know-your-ip/actions)
 [![Downloads](https://static.pepy.tech/badge/know-your-ip)](https://pepy.tech/project/know-your-ip)
 
-**Turn a list of IP addresses into a table you can analyse.**
+**Join a list of IP addresses against everything known about them.**
 
 Built for research: hand it ten thousand addresses and it stays inside every
 API's rate limit, never pays for the same lookup twice, doesn't lose a row when
@@ -18,20 +18,56 @@ It does something useful before you sign up for anything.
 ```python
 import know_your_ip as kyi
 
-result = kyi.enrich(["8.8.8.8", "1.1.1.1"], providers=["network", "rdap"])
+result = kyi.enrich(["66.249.66.1", "199.27.76.249"], providers=["rdap", "ranges"])
 
-for row in result:
-    print(row["ip"], row["rdap.name"], row["network.reverse_dns"])
+for row in result.canonical:
+    print(
+        row["ip"],
+        row.get("registry_handle"),
+        row.get("bot_name"),
+        row.get("hosting_provider"),
+    )
 ```
 
 ```
-8.8.8.8 GOGL dns.google
-1.1.1.1 APNIC-LABS one.one.one.one
+66.249.66.1 NET-66-249-64-0-1 googlebot None
+199.27.76.249 NET-199-27-72-0-1 None fastly
 ```
 
-That is who the address is registered to, and what it calls itself — with no
-API key, no database download, and no account. Add keys later for reputation
-and exposure data.
+One is Google's crawler, the other is Fastly's CDN — no API key, no database
+download, no account. Add keys later for reputation and exposure data.
+
+## One column per variable, not one per vendor
+
+Providers spell the same thing differently. Ask five of them about an address
+and "country" comes back about fifteen times, meaning three different things:
+MaxMind alone returns `country.iso_code`, `country.geoname_id`, and the country
+name in ten languages — plus a separate `registered_country`, which is where
+the *block* is registered and routinely differs from where the address is used.
+
+`result.canonical` does the reconciliation, and says how much the sources
+agreed:
+
+| column | meaning |
+|---|---|
+| `country_code` | the value sources settled on |
+| `country_code.sources` | which providers answered |
+| `country_code.agree` | whether they concurred (absent if only one did) |
+| `country_code.values` | the distinct answers, when they disagreed |
+
+Disagreement is reported rather than resolved away. Geolocation sources
+genuinely differ, and every other tool hides that behind one confident answer.
+
+```python
+import know_your_ip as kyi
+
+result = kyi.enrich(["8.8.8.8"], providers=["rdap", "ranges"])
+print(result.disagreements)
+```
+
+`result.tidy()` gives the same data in long form — one row per address, field,
+and source — which is the shape for comparing sources, and for a paper's
+appendix.
 
 ## Why not just call the APIs yourself?
 
@@ -73,7 +109,8 @@ Organised by the question, not by the vendor.
 | Where is it? | MaxMind GeoLite2 · Censys | Free database · free tier |
 | Has it been reported for abuse? | AbuseIPDB · VirusTotal | Free tiers |
 | What is it running, and what's exposed? | Censys · Shodan | Free tier · paid |
-| Is it a VPN, proxy, or datacenter? | APIVoid · AbuseIPDB usage type | Paid · free |
+| Is it a VPN, proxy, or datacenter? | Published cloud/CDN ranges · APIVoid | No · paid |
+| Is it a Tor exit, or a search crawler? | Tor Project · Google and Bing range files | No |
 | How does the network reach it? | ping, traceroute | No |
 
 Knowing what *isn't* routable matters more than it sounds: real address data is

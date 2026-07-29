@@ -436,6 +436,7 @@ class TestQueryIP:
         config.maxmind.enabled = False
         config.network.enabled = False
         config.rdap.enabled = False
+        config.ranges.enabled = False
         config.geonames.enabled = True
         config.timezone.enabled = True
 

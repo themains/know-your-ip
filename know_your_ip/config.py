@@ -139,6 +139,19 @@ class NetworkConfig(_Section):
     dns_timeout: float = Field(default=5.0, gt=0)
 
 
+class RangesConfig(_Section):
+    """Membership in published network ranges.
+
+    Note:
+        Sources are the operators' own published files - AWS, GCP, Cloudflare,
+        Fastly, the Tor Project, Google, and Bing. Free, keyless, and fetched
+        at most once per TTL rather than once per address.
+    """
+
+    enabled: bool = True
+    ttl_seconds: int = Field(default=86_400, ge=60)
+
+
 class RDAPConfig(_Section):
     """Registry data via RDAP, the IETF successor to port-43 WHOIS.
 
@@ -289,6 +302,7 @@ class KnowYourIPConfig(BaseModel):
     timezone: TimezoneConfig = Field(default_factory=TimezoneConfig)
     network: NetworkConfig = Field(default_factory=NetworkConfig)
     rdap: RDAPConfig = Field(default_factory=RDAPConfig)
+    ranges: RangesConfig = Field(default_factory=RangesConfig)
     apivoid: APIVoidConfig = Field(default_factory=APIVoidConfig)
     censys: CensysConfig = Field(default_factory=CensysConfig)
     shodan: ShodanConfig = Field(default_factory=ShodanConfig)
