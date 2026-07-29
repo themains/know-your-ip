@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import io
+import shutil
 import tarfile
+from pathlib import Path
 
 import pytest
 import responses
@@ -223,3 +225,70 @@ class TestFailuresAreLoggedOnceButRecordedAlways:
 
         warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
         assert len(warnings) == 1
+
+
+class TestMaxMindProviderAgainstRealDatabase:
+    """Exercise the provider against a genuine .mmdb file.
+
+    MaxMind publishes small test databases under Apache-2.0 in the MaxMind-DB
+    repository, so the provider can be verified against the real binary format
+    without a licence key or a 60 MB download. Everything before this was
+    mocked, which would not have caught a change in the record shape - and a
+    change in the record shape is exactly what broke this provider when geoip2
+    5.0 removed `.raw`.
+    """
+
+    @pytest.fixture
+    def config(self, tmp_path):
+        from know_your_ip import KnowYourIPConfig
+
+        fixture = Path(__file__).parent / "fixtures" / "GeoLite2-City-Test.mmdb"
+        shutil.copy(fixture, tmp_path / "GeoLite2-City.mmdb")
+        config = KnowYourIPConfig()
+        config.maxmind.db_path = tmp_path
+        return config
+
+    def test_returns_real_geolocation(self, config):
+        from know_your_ip import maxmind_geocode_ip
+
+        out = maxmind_geocode_ip(config, "81.2.69.142")
+
+        assert out["maxmind.country.names.en"] == "United Kingdom"
+        assert out["maxmind.city.names.en"] == "London"
+
+    def test_produces_the_documented_column_names(self, config):
+        """The default output columns must match what the provider emits."""
+        from know_your_ip import maxmind_geocode_ip
+        from know_your_ip.config import DEFAULT_OUTPUT_COLUMNS
+
+        out = maxmind_geocode_ip(config, "81.2.69.142")
+        expected = {c for c in DEFAULT_OUTPUT_COLUMNS if c.startswith("maxmind.")}
+
+        assert expected & set(out), (
+            "no default maxmind.* column is produced by the provider"
+        )
+
+    def test_supplies_coordinates_for_downstream_providers(self, config):
+        """query_ip feeds these to the coordinate-based providers."""
+        from know_your_ip import maxmind_geocode_ip
+
+        out = maxmind_geocode_ip(config, "81.2.69.142")
+
+        assert isinstance(out["maxmind.location.latitude"], float)
+        assert isinstance(out["maxmind.location.longitude"], float)
+
+    def test_absent_address_returns_empty(self, config):
+        from know_your_ip import maxmind_geocode_ip
+
+        assert maxmind_geocode_ip(config, "203.0.113.99") == {}
+
+    def test_query_ip_end_to_end(self, config):
+        from know_your_ip import query_ip
+
+        config.network.enabled = False
+        config.rdap.enabled = False
+
+        record = query_ip(config, "81.2.69.142")
+
+        assert record["maxmind.country.names.en"] == "United Kingdom"
+        assert "maxmind.error" not in record
