@@ -22,6 +22,8 @@ from .config import KnowYourIPConfig, load_config
 from .core import InvalidIPError, read_ip_file, validate_ip
 from .core import query_ip as _query_ip
 from .providers import REGISTRY
+from .schema import canonicalize
+from .schema import tidy as _tidy
 
 logger = logging.getLogger(__name__)
 
@@ -58,10 +60,7 @@ class EnrichResult:
         Returns:
             Ordered field names.
         """
-        seen: dict[str, None] = {}
-        for record in self.records:
-            seen.update(dict.fromkeys(record))
-        return list(seen)
+        return _union_columns(self.records)
 
     @property
     def errors(self) -> dict[str, int]:
@@ -72,14 +71,67 @@ class EnrichResult:
         """
         return _error_counts(self.records)
 
-    def to_dataframe(self) -> Any:
-        """Return the records as a pandas DataFrame.
+    @property
+    def canonical(self) -> list[dict[str, Any]]:
+        """The joined view: one column per variable rather than per vendor.
+
+        Providers spell the same thing differently - country arrives about
+        fifteen ways across five providers. This reduces them to canonical
+        columns, each carrying which sources reported and whether they agreed.
 
         Returns:
-            A DataFrame with one row per address.
+            One canonical record per address.
+        """
+        return [canonicalize(r) for r in self.records]
+
+    def tidy(self) -> list[dict[str, Any]]:
+        """Long form: one row per address, field, and source.
+
+        This is the shape for comparing sources - "which disagreed, and how"
+        becomes a groupby rather than reading forty columns by eye.
+
+        Returns:
+            Rows of ``{ip, field, source, value}``.
+        """
+        return _tidy(self.records)
+
+    @property
+    def disagreements(self) -> list[dict[str, Any]]:
+        """Every field where sources reported different values.
+
+        Returns:
+            Rows of ``{ip, field, chosen, values, sources}``.
+        """
+        found = []
+        for record in self.canonical:
+            for key, value in record.items():
+                if not key.endswith(".values"):
+                    continue
+                field = key.removesuffix(".values")
+                found.append(
+                    {
+                        "ip": record.get("ip"),
+                        "field": field,
+                        "chosen": record.get(field),
+                        "values": value,
+                        "sources": record.get(f"{field}.sources"),
+                    }
+                )
+        return found
+
+    def to_dataframe(self, shape: str = "canonical") -> Any:
+        """Return the records as a pandas DataFrame.
+
+        Args:
+            shape: ``"canonical"`` for the joined table (default), ``"raw"``
+                for every vendor-shaped field, or ``"tidy"`` for long form.
+
+        Returns:
+            A DataFrame.
 
         Raises:
             ImportError: If the optional ``pandas`` extra is not installed.
+            ValueError: If ``shape`` is not one of the three known shapes.
         """
         try:
             import pandas as pd
@@ -89,27 +141,75 @@ class EnrichResult:
                 "pip install 'know_your_ip[pandas]'"
             ) from exc
 
-        return pd.DataFrame(self.records, columns=self.columns)
+        match shape:
+            case "canonical":
+                rows = self.canonical
+                return pd.DataFrame(rows, columns=_union_columns(rows))
+            case "raw":
+                return pd.DataFrame(self.records, columns=self.columns)
+            case "tidy":
+                return pd.DataFrame(self.tidy())
+            case _:
+                raise ValueError(
+                    f"shape must be canonical, raw, or tidy; got {shape!r}"
+                )
 
-    def to_csv(self, path: str | Path, columns: list[str] | None = None) -> Path:
+    def to_csv(
+        self,
+        path: str | Path,
+        columns: list[str] | None = None,
+        shape: str = "canonical",
+    ) -> Path:
         """Write the records to a CSV file.
 
         Args:
             path: Destination file.
-            columns: Column order. Defaults to every field collected.
+            columns: Explicit column order. Defaults to the columns present.
+            shape: ``"canonical"`` for the joined table (default), ``"raw"``
+                for every vendor-shaped field, or ``"tidy"`` for long form.
 
         Returns:
             The path written.
+
+        Raises:
+            ValueError: If ``shape`` is not one of the three known shapes.
         """
         import csv
 
+        match shape:
+            case "canonical":
+                rows = self.canonical
+            case "raw":
+                rows = self.records
+            case "tidy":
+                rows = self.tidy()
+            case _:
+                raise ValueError(
+                    f"shape must be canonical, raw, or tidy; got {shape!r}"
+                )
+
         destination = Path(path)
-        fieldnames = columns or self.columns
+        fieldnames = columns or _union_columns(rows)
         with destination.open("w", newline="", encoding="utf-8") as fh:
             writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore")
             writer.writeheader()
-            writer.writerows(self.records)
+            writer.writerows(rows)
         return destination
+
+
+def _union_columns(rows: list[dict[str, Any]]) -> list[str]:
+    """Every key across rows, in first-seen order.
+
+    Args:
+        rows: Records that may not share a shape.
+
+    Returns:
+        Ordered column names.
+    """
+    seen: dict[str, None] = {}
+    for row in rows:
+        seen.update(dict.fromkeys(row))
+    return list(seen)
 
 
 def _build_manifest(

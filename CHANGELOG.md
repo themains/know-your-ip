@@ -5,6 +5,29 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **The join.** Output was a concatenation with a shared index: ask five
+  providers about an address and "country" came back about fifteen times,
+  meaning three different things, with reconciliation left to the user.
+  `result.canonical` now gives one column per variable, each carrying which
+  sources answered and whether they agreed. `result.tidy()` gives the same in
+  long form; `result.disagreements` lists where sources differed.
+  Disagreement is surfaced, not resolved away.
+  The mapping is deliberately conservative and several near-misses are kept
+  apart by design - `registered_country` is not `country`, an AS's country is
+  not the address's, and an ISP name is not an AS name. Those constraints are
+  enforced by tests rather than left as comments.
+- **A `ranges` provider**: membership in published network ranges from AWS,
+  GCP, Cloudflare, Fastly, the Tor Project, Google, and Bing. All keyless and
+  authoritative - these are the operators' own files. Answers "datacenter, CDN,
+  Tor exit, or crawler", which for research is often the real question.
+  Roughly 19,000 networks are indexed; lookups take about 6 microseconds
+  because networks are bucketed by first octet rather than scanned, which is
+  what makes a ten-thousand-address batch viable.
+
 ## [0.5.0] - 2026-07-28
 
 ### Added

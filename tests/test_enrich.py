@@ -27,7 +27,7 @@ ADDRESSES = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]
 def config() -> KnowYourIPConfig:
     """Config with only VirusTotal on, so request counts are unambiguous."""
     config = KnowYourIPConfig()
-    for section in ("maxmind", "network", "rdap"):
+    for section in ("maxmind", "network", "rdap", "ranges"):
         getattr(config, section).enabled = False
     config.virustotal.enabled = True
     config.virustotal.api_key = "k"
@@ -38,7 +38,8 @@ def config() -> KnowYourIPConfig:
 def offline() -> KnowYourIPConfig:
     """Config with only offline classification on: no network at all."""
     config = KnowYourIPConfig()
-    for section in ("maxmind", "rdap", "virustotal"):
+    # ranges fetches published CIDR lists, so it is not offline either.
+    for section in ("maxmind", "rdap", "virustotal", "ranges"):
         getattr(config, section).enabled = False
     config.network.enabled = True
     config.network.reverse_dns = False
