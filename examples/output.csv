@@ -1,6 +1,6 @@
-ip,maxmind.continent.names.en,maxmind.country.names.en,maxmind.location.time_zone,maxmind.postal.code,maxmind.registered_country.names.en,tzwhere.timezone,abuseipdb.bad_isp,abuseipdb.categories,ipvoid.blacklist_status,ipvoid.reverse_dns,shodan.asn,shodan.isp,shodan.vulns,shodan.os,shodan.ports
-94.31.29.154,Europe,United Kingdom,Europe/London,,United Kingdom,Europe/London,,,BLACKLISTED 1/96,94.31.29.154.IPYX-077437-ZYO.above.net,,,,,
-204.2.197.211,North America,United States,America/Denver,80111,United States,America/Denver,,,POSSIBLY SAFE 0/96,map-e2.pipelane.net,,,,,
-199.27.76.249,North America,United States,America/Los_Angeles,94107,United States,America/Los_Angeles,,,BLACKLISTED 1/96,Unknown,,,,,
-199.96.57.8,North America,United States,America/Los_Angeles,94103,United States,America/Los_Angeles,,,POSSIBLY SAFE 0/96,Unknown,,,,,
-23.235.39.249,North America,United States,,,United States,America/Chicago,,,POSSIBLY SAFE 0/96,Unknown,,,,,
+ip,network.version,network.category,network.is_global,network.is_private,network.is_routable,network.reverse_dns,rdap.handle,rdap.name,rdap.type,rdap.country,rdap.start_address,rdap.end_address,rdap.ip_version,rdap.parent_handle,rdap.status,rdap.registration,rdap.last_changed,rdap.abuse_email
+94.31.29.154,4,public,True,False,True,94.31.29.154.ipyx-077437-zyo.above.net,94.31.29.0 - 94.31.29.255,NetDNA,ASSIGNED PA,GB,94.31.29.0,94.31.29.255,v4,94.31.0.0 - 94.31.63.255,active,2013-10-02T21:08:56Z,2013-10-02T21:08:56Z,zayoabuse@zayo.com
+204.2.197.211,4,public,True,False,True,map-e2.pipelane.net,NET-204-0-0-0-1,NTTA-204,DIRECT ALLOCATION,,204.0.0.0,204.3.255.255,v4,NET-204-0-0-0-0,active,1994-05-04T00:00:00-04:00,2026-06-15T17:48:06-04:00,abuse@ntt.net
+199.27.76.249,4,public,True,False,True,,NET-199-27-72-0-1,FASTLY,DIRECT ALLOCATION,,199.27.72.0,199.27.79.255,v4,NET-199-0-0-0-0,active,2011-10-17T16:04:56-04:00,2021-12-14T20:28:44-05:00,abuse@fastly.com
+199.96.57.8,4,public,True,False,True,,NET-199-96-56-0-1,TWITTER-NETWORK,DIRECT ALLOCATION,,199.96.56.0,199.96.63.255,v4,NET-199-0-0-0-0,active,2012-02-01T17:20:49-05:00,2020-06-28T13:49:14-04:00,net-abuse@twitter.com
+23.235.39.249,4,public,True,False,True,,NET-23-235-32-0-1,FASTLY-2,DIRECT ALLOCATION,,23.235.32.0,23.235.47.255,v4,NET-23-0-0-0-0,active,2013-10-01T18:57:20-04:00,2021-12-14T20:28:34-05:00,abuse@fastly.com
