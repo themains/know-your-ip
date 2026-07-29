@@ -76,8 +76,16 @@ class TestReadmeBlocks:
             if name.startswith("KNOW_YOUR_IP_"):
                 monkeypatch.delenv(name, raising=False)
 
-        # Executing documentation is the entire point of this test.
-        exec(  # noqa: S102
-            compile(source, f"README.md:{line}", "exec"),
-            {"__name__": "__main__"},
-        )
+        try:
+            # Executing documentation is the entire point of this test.
+            exec(  # noqa: S102
+                compile(source, f"README.md:{line}", "exec"),
+                {"__name__": "__main__"},
+            )
+        except ImportError as exc:
+            # A block demonstrating an optional feature is still correct when
+            # the extra is absent - that is what the bare wheel job installs.
+            # Anything else is a real failure.
+            if "know_your_ip[" not in str(exc):
+                raise
+            pytest.skip(f"README block needs an optional extra: {exc}")
