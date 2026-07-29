@@ -5,6 +5,31 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `examples/example.ipynb` failed on its first cell: it imported
+  `tzwhere_timezone`, `ipvoid_scan`, and `abuseipdb_web`, all removed in 0.3.0.
+  Rewritten against the current API, with prose, and it now runs top to bottom
+  with no API keys and no MaxMind database. Outputs are not committed - stale
+  embedded output is what rotted here in the first place.
+- `examples/example.py` raised `FileNotFoundError` on a fresh install, because
+  it calls `maxmind_geocode_ip` directly and MaxMind is enabled by default
+  without a database. It now handles that explicitly and leads with the keyless
+  providers.
+- `examples/output.csv` still carried columns from providers deleted in 0.3.0
+  (`tzwhere.*`, `ipvoid.*`, `abuseipdb.bad_isp`). Regenerated from
+  `examples/input.csv` using only the keyless providers, so it is reproducible
+  by anyone with no accounts.
+
+### Added
+
+- `tests/test_examples.py` checks that every name the examples import still
+  exists, that the sample configuration validates against the models, and that
+  the sample output's columns belong to registered providers. Nothing covered
+  `examples/`, which is why all three defects above shipped.
+
 ## [0.4.0] - 2026-07-27
 
 ### Added

@@ -33,9 +33,19 @@ def main() -> None:
 
     lat = lng = None
 
+    print("\n--- Keyless: classification, reverse DNS, registry ---")
+    pprint(query_ip(config, IP, providers=["network", "rdap"]))
+
     if config.maxmind.enabled:
         print("\n--- MaxMind ---")
-        result = maxmind_geocode_ip(config, IP)
+        # Enabled by default, but the database needs a free account. Calling
+        # the provider directly raises rather than recording an error the way
+        # query_ip does, so this example handles it explicitly.
+        try:
+            result = maxmind_geocode_ip(config, IP)
+        except FileNotFoundError as exc:
+            print(exc)
+            result = {}
         pprint(result)
         lat = result.get("maxmind.location.latitude")
         lng = result.get("maxmind.location.longitude")
