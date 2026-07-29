@@ -5,6 +5,17 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `examples/example.ipynb` failed partway through on a bare install: its
+  DataFrame cell imported `pandas` unguarded, and `pandas` is an optional
+  extra. The notebook is meant to run top to bottom with no accounts and no
+  optional dependencies, so the cell now degrades to a message naming the
+  extra. Found by executing the notebook in CI, which is what the previous
+  release added.
+
 ## [0.6.1] - 2026-07-28
 
 ### Fixed
