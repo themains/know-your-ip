@@ -214,22 +214,24 @@ def _union_columns(rows: list[dict[str, Any]]) -> list[str]:
 
 def _build_manifest(
     config: KnowYourIPConfig,
-    provider_names: list[str],
+    providers_run: list[Any],
     as_of: date | None,
     started: datetime,
     records: list[dict[str, Any]],
     requested: int,
+    unique: int,
     skipped: list[str],
 ) -> dict[str, Any]:
     """Describe the run precisely enough to defend or repeat it.
 
     Args:
         config: Configuration used.
-        provider_names: Providers that actually ran.
+        providers_run: Provider objects that actually ran.
         as_of: Historical date requested, if any.
         started: When the run began.
         records: The records produced.
         requested: How many addresses were supplied.
+        unique: How many distinct addresses were fetched.
         skipped: Addresses rejected as invalid.
 
     Returns:
@@ -242,18 +244,22 @@ def _build_manifest(
         "know_your_ip_version": __version__,
         "started_at": started.isoformat(),
         "finished_at": datetime.now(UTC).isoformat(),
-        "providers": provider_names,
+        "providers": [p.name for p in providers_run],
+        # Keyed by config section, not provider name: Provider.section exists
+        # because the two need not match, and a wrong fingerprint silently
+        # invalidates the reproducibility claim.
         "config_fingerprint": config_fingerprint(
             {
-                name: getattr(config, name).model_dump(
+                p.section: getattr(config, p.section).model_dump(
                     exclude={"api_key", "username", "organization_id"}
                 )
-                for name in provider_names
-                if hasattr(config, name)
+                for p in providers_run
+                if hasattr(config, p.section)
             }
         ),
         "as_of": as_of.isoformat() if as_of else None,
         "addresses_requested": requested,
+        "addresses_unique": unique,
         "addresses_enriched": len(records),
         "addresses_skipped_invalid": skipped,
         "records_served_from_cache": cached,
@@ -341,7 +347,6 @@ def enrich(
             skipped.append(str(candidate))
 
     selected = REGISTRY.for_as_of(REGISTRY.selected(config, providers), as_of)
-    provider_names = [p.name for p in selected]
 
     def run(ip: str) -> dict[str, Any]:
         return _query_ip(
@@ -356,8 +361,14 @@ def enrich(
     records: list[dict[str, Any]] = []
     try:
         if valid:
-            with ThreadPool(processes=min(max_workers, len(valid))) as pool:
-                records = list(pool.imap(run, valid))
+            # Fetch each distinct address once, then project back onto the
+            # caller's rows. Real address lists repeat, and within a single run
+            # nothing is cached yet, so every repeat would otherwise spend
+            # metered quota for information already in hand.
+            unique = list(dict.fromkeys(valid))
+            with ThreadPool(processes=min(max_workers, len(unique))) as pool:
+                by_address = dict(zip(unique, pool.imap(run, unique), strict=True))
+            records = [dict(by_address[ip]) for ip in valid]
     finally:
         if owns_cache and isinstance(cache, Cache):
             cache.close()
@@ -365,7 +376,14 @@ def enrich(
     return EnrichResult(
         records=records,
         manifest=_build_manifest(
-            config, provider_names, as_of, started, records, requested, skipped
+            config,
+            selected,
+            as_of,
+            started,
+            records,
+            requested,
+            len(dict.fromkeys(valid)),
+            skipped,
         ),
     )
 

@@ -1,6 +1,8 @@
 .ipynb*
 !.gitignore
 *.log
+# Observation caches. The notebook and the README examples both write one.
+*.sqlite
 *.html
 *.pyc
 *.7z

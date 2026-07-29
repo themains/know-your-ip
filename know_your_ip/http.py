@@ -153,6 +153,20 @@ def _user_agent() -> str:
         return "know_your_ip"
 
 
+def _sleep(seconds: float) -> None:
+    """Wait between retry attempts.
+
+    A named indirection so tests can stub retry backoff without patching
+    ``time.sleep``. ``http.time`` *is* the time module, so patching through it
+    disables sleeping for the entire process - which silently defeated
+    concurrency tests elsewhere in the suite.
+
+    Args:
+        seconds: How long to wait.
+    """
+    time.sleep(seconds)
+
+
 def _retry_delay(attempt: int, response: requests.Response | None) -> float:
     """Compute how long to wait before the next attempt.
 
@@ -268,7 +282,7 @@ def request(
             error = f"{type(exc).__name__}: {exc}"
             logger.warning("%s: %s", provider, error)
             if attempt + 1 < max_attempts:
-                time.sleep(_retry_delay(attempt, None))
+                _sleep(_retry_delay(attempt, None))
             continue
 
         if last.status_code not in RETRYABLE_STATUSES:
@@ -282,6 +296,6 @@ def request(
             max_attempts,
         )
         if attempt + 1 < max_attempts:
-            time.sleep(_retry_delay(attempt, last))
+            _sleep(_retry_delay(attempt, last))
 
     return HTTPResult(last, error, max_attempts)

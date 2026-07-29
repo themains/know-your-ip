@@ -199,7 +199,7 @@ class TestPingAndTracerouteFailureBranches:
 
         with mock.patch("know_your_ip.ping.subprocess.run") as run:
             run.return_value = mock.Mock(
-                returncode=0, stdout="unparseable output", stderr=""
+                returncode=0, stdout="unparsable output", stderr=""
             )
 
             assert quiet_ping("8.8.8.8") is None

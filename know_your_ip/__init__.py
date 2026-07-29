@@ -38,6 +38,8 @@ from .core import (
     virustotal_api,
 )
 from .enrich import EnrichResult, enrich, enrich_csv
+from .ranges import range_lookup
+from .schema import canonicalize, tidy
 
 __all__ = [
     "ConfigurationError",
@@ -47,6 +49,7 @@ __all__ = [
     "__version__",
     "abuseipdb_api",
     "apivoid_api",
+    "canonicalize",
     "censys_api",
     "create_default_config",
     "enrich",
@@ -56,8 +59,10 @@ __all__ = [
     "maxmind_geocode_ip",
     "ping",
     "query_ip",
+    "range_lookup",
     "select_columns",
     "shodan_api",
+    "tidy",
     "timezone_at",
     "traceroute",
     "validate_ip",

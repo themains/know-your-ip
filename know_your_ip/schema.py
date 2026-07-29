@@ -21,8 +21,12 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-# Canonical name -> provider keys that feed it, in no significant order: the
-# value is chosen by agreement, not by source priority.
+# Canonical name -> provider keys that feed it.
+#
+# The value is chosen by agreement, so ordering usually does not matter. It does
+# on a tie: with two sources reporting two values, the earlier entry wins. Each
+# list is therefore ordered most-authoritative-first deliberately - a dedicated
+# geolocation database before a reputation service's incidental country field.
 CANONICAL: dict[str, list[str]] = {
     # Geolocation. Reads ISO codes rather than localized names, which sidesteps
     # MaxMind emitting each place name in ten languages.

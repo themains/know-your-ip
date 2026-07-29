@@ -110,6 +110,48 @@ class TestExampleImports:
         ast.parse(_notebook_source(notebook))
 
 
+class TestExamplesActuallyRun:
+    """Resolving imports is not the same as working.
+
+    The static checks above catch a deleted symbol, which is how the notebook
+    broke in 0.4.0. They cannot catch a call whose signature changed or a
+    provider whose output moved, because both parse fine. Only execution does,
+    and until now the notebook was executed by hand or not at all.
+    """
+
+    @pytest.mark.network
+    @pytest.mark.parametrize("notebook", _notebooks(), ids=lambda p: p.name)
+    def test_notebook_executes(self, notebook, tmp_path):
+        nbformat = pytest.importorskip("nbformat")
+        nbclient = pytest.importorskip("nbclient")
+        pytest.importorskip("ipykernel")
+
+        parsed = nbformat.read(notebook, as_version=4)
+        # Run in a scratch directory: the notebook writes a cache and a log,
+        # and neither belongs in the working tree.
+        nbclient.NotebookClient(
+            parsed,
+            timeout=600,
+            kernel_name="python3",
+            resources={"metadata": {"path": str(tmp_path)}},
+        ).execute()
+
+    def test_notebook_ships_without_outputs(self):
+        """Embedded outputs are what rotted here and in output.csv.
+
+        A notebook that cannot carry stale data cannot mislead.
+        """
+        for notebook in _notebooks():
+            cells = json.loads(notebook.read_text())["cells"]
+            stale = [
+                i
+                for i, cell in enumerate(cells)
+                if cell.get("cell_type") == "code" and cell.get("outputs")
+            ]
+
+            assert not stale, f"{notebook.name} ships outputs in cells {stale}"
+
+
 class TestExampleConfig:
     def test_sample_config_validates(self):
         """It is generated from the models, but a stale committed copy would

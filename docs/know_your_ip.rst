@@ -101,3 +101,17 @@ API reference
    :members:
    :undoc-members:
    :show-inheritance:
+
+The join
+--------
+
+.. automodule:: know_your_ip.schema
+   :members:
+   :show-inheritance:
+
+Published network ranges
+------------------------
+
+.. automodule:: know_your_ip.ranges
+   :members:
+   :show-inheritance:

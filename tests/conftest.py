@@ -34,7 +34,10 @@ def no_backoff_sleep(request, monkeypatch):
     """
     if "real_sleep" in request.keywords:
         return
-    monkeypatch.setattr("know_your_ip.http.time.sleep", lambda _: None)
+    # Stub the retry backoff specifically. Patching know_your_ip.http.time.sleep
+    # would patch the time module itself, disabling sleeping process-wide and
+    # silently defeating any test that relies on real timing.
+    monkeypatch.setattr("know_your_ip.http._sleep", lambda _: None)
 
 
 @pytest.fixture(autouse=True)
