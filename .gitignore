@@ -6,6 +6,9 @@
 *.7z
 venv
 *.mmdb
+# The MaxMind test database is a 21 KB Apache-2.0 fixture of synthetic records
+# from MaxMind's own repository, not a licensed GeoLite2 build.
+!tests/fixtures/*.mmdb
 dev/
 venv2
 venv3
