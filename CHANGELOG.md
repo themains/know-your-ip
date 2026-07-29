@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `enrich()` and `enrich_csv()` - the batch API the README always promised.
+  `query_ip` handles one address; real work is a list of them, and a loop does
+  not solve staying inside rate limits, avoiding repeat charges, or not losing
+  a row when a service is unhealthy. Returns an `EnrichResult` carrying the
+  records, a `to_dataframe()` (needs the `[pandas]` extra), `to_csv()`, and a
+  **run manifest**: package version, providers used, a settings fingerprint
+  with secrets excluded, cache hits, and per-provider error counts. Save it
+  beside your results and the table can be regenerated and defended.
 - The MaxMind provider is now tested against a genuine `.mmdb` file, using the
   small Apache-2.0 test database from MaxMind's own MaxMind-DB repository. No
   licence key or 60 MB download needed. Everything about that provider was
@@ -16,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that broke it when geoip2 5.0 removed `.raw`.
 
 ## [0.4.1] - 2026-07-28
+
+### Changed
+
+- The README is rewritten for the people who actually use this: researchers
+  enriching thousands of addresses. It now opens with something that runs
+  before you sign up for anything, and answers the question that matters -
+  why not just call these APIs yourself - instead of listing features.
 
 ### Fixed
 

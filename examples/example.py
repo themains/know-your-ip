@@ -13,6 +13,7 @@ from know_your_ip import (
     abuseipdb_api,
     apivoid_api,
     censys_api,
+    enrich,
     geonames_timezone,
     load_config,
     maxmind_geocode_ip,
@@ -35,6 +36,18 @@ def main() -> None:
 
     print("\n--- Keyless: classification, reverse DNS, registry ---")
     pprint(query_ip(config, IP, providers=["network", "rdap"]))
+
+    print("\n--- Many addresses at once ---")
+    # enrich is the batch entry point: paced to each provider's rate limit,
+    # optionally cached, and it returns a manifest describing the run.
+    batch = enrich(["8.8.8.8", "1.1.1.1"], config=config, providers=["network"])
+    for row in batch:
+        print(f"   {row['ip']:<10} {row['network.category']}")
+    print(
+        "   manifest:",
+        batch.manifest["providers"],
+        batch.manifest["addresses_enriched"],
+    )
 
     if config.maxmind.enabled:
         print("\n--- MaxMind ---")
