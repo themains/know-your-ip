@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "know_your_ip"
-description = "Get data on IP addresses"
+description = "Batch IP address enrichment for research: rate-limit aware, cached, reproducible, and useful without API keys"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -61,6 +61,7 @@ test = [
     "pytest-cov",
     "pytest-mock",
     "responses>=0.25",
+    "hypothesis>=6",
 ]
 docs = [
     "sphinx>=7.0",
@@ -108,9 +109,16 @@ convention = "google"
 minversion = "6.0"
 addopts = "-ra -q --strict-markers"
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = [
+    "error",
+    # timezonefinder leaks a file handle in a __del__; not ours to fix, and
+    # everything else stays an error.
+    "ignore:unclosed file.*coordinates.fbs:ResourceWarning",
+    "ignore::ResourceWarning:timezonefinder.*",
+]
 markers = [
     "real_sleep: test asserts on real timing; do not stub sleep or rate limits",
+    "network: makes real network calls; deselect with -m 'not network'",
 ]
 
 [tool.deptry]

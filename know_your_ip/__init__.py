@@ -37,9 +37,11 @@ from .core import (
     validate_ip,
     virustotal_api,
 )
+from .enrich import EnrichResult, enrich, enrich_csv
 
 __all__ = [
     "ConfigurationError",
+    "EnrichResult",
     "InvalidIPError",
     "KnowYourIPConfig",
     "__version__",
@@ -47,6 +49,8 @@ __all__ = [
     "apivoid_api",
     "censys_api",
     "create_default_config",
+    "enrich",
+    "enrich_csv",
     "geonames_timezone",
     "load_config",
     "maxmind_geocode_ip",

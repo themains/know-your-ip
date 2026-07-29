@@ -19,10 +19,41 @@ jobs:
     uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@v1
     with:
       wheel-import: know_your_ip
-      coverage-floor: 80
+      coverage-floor: 90
       # This package shells out to ping and traceroute and writes CSV, all of
       # which differ per platform: the macOS -W flag is milliseconds while
       # Linux's is seconds, and CSV needs newline="" on Windows. Both bugs
       # shipped unnoticed under a Linux-only matrix.
       os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
       python-versions: '["3.11", "3.14"]'
+
+  # The reusable CI installs --all-extras. Almost every user has none of them,
+  # and that surface was previously only simulated by monkeypatching sys.modules.
+  bare-install:
+    name: Bare install (no extras)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v8.3.2
+      - name: Keyless path works, and optional extras fail helpfully
+        run: |
+          uv run --isolated --no-project --with . python - <<'EOF'
+          import know_your_ip as kyi
+
+          result = kyi.enrich(["8.8.8.8"], providers=["network"])
+          assert result.records[0]["network.category"] == "public", result.records
+
+          for label, call in [
+              ("pandas", lambda: result.to_dataframe()),
+              ("timezone", lambda: kyi.timezone_at(kyi.KnowYourIPConfig(), 51.5, -0.1)),
+              ("shodan", lambda: kyi.shodan_api(kyi.KnowYourIPConfig(), "8.8.8.8")),
+          ]:
+              try:
+                  call()
+              except ImportError as exc:
+                  assert "know_your_ip[" in str(exc), f"{label}: unhelpful message: {exc}"
+              else:
+                  raise AssertionError(f"{label}: expected ImportError without the extra")
+          print("bare install OK")
+          EOF
