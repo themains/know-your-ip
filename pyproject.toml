@@ -170,3 +170,20 @@ packages = ["know_your_ip"]
 [tool.uv-dynamic-versioning]
 vcs = "git"
 style = "pep440"
+
+[tool.preen]
+# Two API bases here are alive but only answer with a path, so fetching them
+# bare reports a dead link for an endpoint this package uses successfully:
+#
+#   rdap.arin.net/registry/            -> 404
+#   rdap.arin.net/registry/ip/8.8.8.8  -> 200   (what the code actually calls)
+#   api.platform.censys.io             -> 404   (called as /v3/global/asset/...)
+#
+# Written without schemes on purpose: a full URL in this comment is itself
+# extracted and checked, so documenting the problem here would recreate it.
+#
+# Narrower than skip_checks = ["links"], which would also stop checking README.
+link_ignore = [
+    "rdap\\.arin\\.net",
+    "api\\.platform\\.censys\\.io",
+]
