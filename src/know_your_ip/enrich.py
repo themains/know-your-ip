@@ -10,12 +10,14 @@ the run that the resulting table can be defended later.
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from multiprocessing.pool import ThreadPool
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
 
 from .cache import Cache, config_fingerprint
 from .config import KnowYourIPConfig, load_config

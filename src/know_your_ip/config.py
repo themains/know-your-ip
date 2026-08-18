@@ -415,7 +415,7 @@ def load_config(config_file: Path | None = None) -> KnowYourIPConfig:
 
     if config_file and config_file.exists():
         try:
-            with open(config_file, "rb") as f:
+            with config_file.open("rb") as f:
                 config_dict.update(tomllib.load(f))
         except (OSError, tomllib.TOMLDecodeError) as e:
             raise ConfigurationError(
