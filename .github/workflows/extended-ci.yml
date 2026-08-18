@@ -1,0 +1,45 @@
+name: Extended CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bare-install:
+    name: Bare install (no extras)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Test keyless and optional-dependency paths
+        run: |
+          uv run --isolated --no-project --with . python - <<'EOF'
+          import know_your_ip as kyi
+
+          result = kyi.enrich(["8.8.8.8"], providers=["network"])
+          assert result.records[0]["network.category"] == "public", result.records
+
+          for label, call in [
+              ("pandas", lambda: result.to_dataframe()),
+              ("timezone", lambda: kyi.timezone_at(kyi.KnowYourIPConfig(), 51.5, -0.1)),
+              ("shodan", lambda: kyi.shodan_api(kyi.KnowYourIPConfig(), "8.8.8.8")),
+          ]:
+              try:
+                  call()
+              except ImportError as exc:
+                  assert "know_your_ip[" in str(exc), f"{label}: unhelpful message: {exc}"
+              else:
+                  raise AssertionError(f"{label}: expected ImportError without the extra")
+          print("bare install OK")
+          EOF

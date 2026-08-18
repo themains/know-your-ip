@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
-build-backend = "hatchling.build"
+requires = ["uv_build>=0.12.5,<0.13"]
+build-backend = "uv_build"
 
 [project]
 name = "know_your_ip"
@@ -34,7 +34,7 @@ dependencies = [
     "requests>=2.31",
     "pydantic>=2.0"
 ]
-dynamic = ["version"]
+version = "0.6.2"
 
 [project.optional-dependencies]
 # Real optional features. timezonefinder ships wheels only for linux-x86_64 and
@@ -85,29 +85,28 @@ Documentation = "https://themains.github.io/know-your-ip/"
 [project.scripts]
 know_your_ip = "know_your_ip.core:main"
 
-[tool.setuptools]
-packages = ["know_your_ip"]
-
-# PEP 561 marker so type checkers trust the package's inline annotations.
-[tool.setuptools.package-data]
-know_your_ip = ["py.typed"]
-
 [tool.ruff]
 line-length = 88
 target-version = "py311"
 
 [tool.ruff.lint]
 external = ["DOC"]
-select = ["E", "W", "F", "I", "B", "C4", "UP", "N", "D", "S", "SIM", "T20", "PT", "RUF"]
-ignore = ["D203", "D213", "B008", "E501"]
+select = [
+    "E", "W", "F", "I", "B", "C4", "UP", "N", "D", "S", "SIM", "T20", "PT", "RUF",
+    "PTH", "RET", "PIE", "FURB", "PERF", "DTZ", "LOG", "G", "TC", "FLY",
+    "RSE", "SLOT", "FA", "A", "EXE", "ICN", "PGH", "PLE", "ARG", "SLF",
+]
+# D203/D213: the google convention the fleet standard picks. W191/D206/D300:
+# ruff's own docs list these as always incompatible with `ruff format`, which
+# the standard also runs.
+ignore = ["D203", "D213", "W191", "D206", "D300", "B008", "E501"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "D"]
+"tests/**" = ["S101", "D", "ARG", "SLF"]
 "docs/**" = ["D"]
-# Example scripts print their results; that is the point of them.
 "examples/**" = ["T20", "D"]
 
 [tool.pytest.ini_options]
@@ -158,18 +157,8 @@ exclude = '\.venv|tests|docs'
 skip = "*.pdf,*.lock,*/_build/*,*/.git/*,*/dist/*,*/.venv/*,*/htmlcov/*"
 
 [tool.pyright]
-include = ["know_your_ip"]
+include = ["src"]
 typeCheckingMode = "standard"
-
-[tool.hatch.version]
-source = "uv-dynamic-versioning"
-
-[tool.hatch.build.targets.wheel]
-packages = ["know_your_ip"]
-
-[tool.uv-dynamic-versioning]
-vcs = "git"
-style = "pep440"
 
 [tool.preen]
 # Two API bases here are alive but only answer with a path, so fetching them
@@ -187,3 +176,6 @@ link_ignore = [
     "rdap\\.arin\\.net",
     "api\\.platform\\.censys\\.io",
 ]
+
+[tool.uv.build-backend]
+module-name = "know_your_ip"

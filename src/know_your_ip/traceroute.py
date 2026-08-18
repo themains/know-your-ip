@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """Cross-platform traceroute using the system command."""
 
 from __future__ import annotations

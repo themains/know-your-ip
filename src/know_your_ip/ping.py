@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """Modern ping implementation using subprocess for cross-platform compatibility.
 
 This module provides ICMP ping functionality using system ping commands,
@@ -83,20 +81,20 @@ def quiet_ping(
         )
 
         if result.returncode != 0:
-            logging.warning(f"Ping to {hostname} failed: {result.stderr.strip()}")
+            logger.warning("Ping to %s failed: %s", hostname, result.stderr.strip())
             return None
 
         # Parse ping output
         return _parse_ping_output(result.stdout, system)
 
     except subprocess.TimeoutExpired:
-        logging.warning(f"Ping to {hostname} timed out")
+        logger.warning("Ping to %s timed out", hostname)
         return None
     except FileNotFoundError:
-        logging.error("Ping command not found on system")
+        logger.error("Ping command not found on system")
         return None
     except Exception as e:
-        logging.error(f"Ping failed: {e}")
+        logger.error("Ping failed: %s", e)
         return None
 
 
@@ -116,10 +114,9 @@ def _parse_ping_output(
     try:
         if system == "windows":
             return _parse_windows_ping(output)
-        else:
-            return _parse_unix_ping(output)
+        return _parse_unix_ping(output)
     except Exception as e:
-        logging.error(f"Failed to parse ping output: {e}")
+        logger.error("Failed to parse ping output: %s", e)
         return None
 
 
@@ -135,9 +132,7 @@ def _parse_windows_ping(output: str) -> tuple[float, float, float, float] | None
         Packets: Sent = 2, Received = 2, Lost = 0 (0% loss),
     """
     # Extract individual response times
-    times = []
-    for match in re.finditer(r"time=(\d+)ms", output):
-        times.append(float(match.group(1)))
+    times = [float(match.group(1)) for match in re.finditer(r"time=(\d+)ms", output)]
 
     if not times:
         return None
@@ -178,9 +173,9 @@ def _parse_unix_ping(output: str) -> tuple[float, float, float, float] | None:
         return max_time, min_time, avg_time, packet_loss
 
     # Fallback: parse individual response times
-    times = []
-    for match in re.finditer(r"time=([\d.]+) ms", output):
-        times.append(float(match.group(1)))
+    times = [
+        float(match.group(1)) for match in re.finditer(r"time=([\d.]+) ms", output)
+    ]
 
     if not times:
         return None

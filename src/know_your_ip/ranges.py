@@ -22,8 +22,10 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from . import http
 from .cache import user_cache_dir
@@ -86,11 +88,11 @@ def _parse_aws(payload: str) -> list[str]:
 def _parse_gcp(payload: str) -> list[str]:
     """Extract prefixes from Google Cloud's cloud.json."""
     data = json.loads(payload)
-    out = []
-    for entry in data.get("prefixes", []):
-        if prefix := entry.get("ipv4Prefix") or entry.get("ipv6Prefix"):
-            out.append(prefix)
-    return out
+    return [
+        prefix
+        for entry in data.get("prefixes", [])
+        if (prefix := entry.get("ipv4Prefix") or entry.get("ipv6Prefix"))
+    ]
 
 
 def _parse_fastly(payload: str) -> list[str]:

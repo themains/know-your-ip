@@ -9,6 +9,7 @@ tests exist to keep specific pairs apart.
 from __future__ import annotations
 
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -216,7 +217,7 @@ class TestAgainstRealProviderOutput:
 
         from know_your_ip.core import _parse_censys
 
-        with open("tests/fixtures/censys_host_8.8.8.8.json") as fh:
+        with Path("tests/fixtures/censys_host_8.8.8.8.json").open() as fh:
             resource = json.load(fh)["result"]["resource"]
 
         out = canonicalize(_parse_censys(resource))

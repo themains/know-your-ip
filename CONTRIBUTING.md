@@ -38,12 +38,12 @@ rather than the credential.
 
 ## Adding a service
 
-1. Add a configuration section in `know_your_ip/config.py`, inheriting from
+1. Add a configuration section in `src/know_your_ip/config.py`, inheriting from
    `_Section` so unknown keys are rejected.
 2. Add a `<service>_api(config, ip)` function returning a flat dict whose keys
    are prefixed with `<service>.`.
 3. Call it from `query_ip()` behind an `enabled` check.
-4. Export it from `know_your_ip/__init__.py`.
+4. Export it from `src/know_your_ip/__init__.py`.
 5. Add tests covering the success path, a 429, an auth failure, and a
    not-found response.
 6. If it needs a heavyweight or platform-limited dependency, make it an

@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """Query IP address metadata and reputation from multiple services."""
 
 from __future__ import annotations
@@ -96,14 +94,14 @@ def setup_logger(verbose: bool = False, log_file: Path | None = None) -> None:
     # once in a process (tests, or an embedding caller), and without this each
     # run stacks another console and file handler, duplicating every record
     # and holding the old log file open.
-    for existing in [h for h in root.handlers if getattr(h, "_kyip", False)]:
+    for existing in [h for h in root.handlers if getattr(h, "kyip", False)]:
         root.removeHandler(existing)
         existing.close()
 
     console = logging.StreamHandler()
     console.setLevel(level)
     console.setFormatter(logging.Formatter("%(message)s"))
-    console._kyip = True  # type: ignore[attr-defined]
+    console.kyip = True  # type: ignore[attr-defined]
     root.addHandler(console)
 
     if log_file is not None:
@@ -115,7 +113,7 @@ def setup_logger(verbose: bool = False, log_file: Path | None = None) -> None:
                 datefmt="%Y-%m-%d %H:%M:%S",
             )
         )
-        handler._kyip = True  # type: ignore[attr-defined]
+        handler.kyip = True  # type: ignore[attr-defined]
         root.addHandler(handler)
 
     logging.getLogger("requests").setLevel(logging.WARNING)
@@ -371,6 +369,7 @@ def timezone_at(config: KnowYourIPConfig, lat: float, lng: float) -> str | None:
         >>> timezone_at(config, 32.0617, 118.7778)  # doctest: +SKIP
         'Asia/Shanghai'
     """
+    del config
     global _TIMEZONE_FINDER
     if _TIMEZONE_FINDER is None:
         try:
@@ -1276,7 +1275,7 @@ def main(argv: list[str] | None = None) -> int:
         logger.error("No valid IP addresses to process")
         return 1
 
-    end = args.to if args.to else len(ips)
+    end = args.to or len(ips)
     ips = ips[args.from_row : end]
     if not ips:
         logger.error("Row range --from/--to selected no addresses")
@@ -1361,7 +1360,7 @@ def _write_results(args: argparse.Namespace, ips: list[str], query: Any) -> int:
         "raw": result.records,
         "tidy": result.tidy(),
     }[shape]
-    with open(args.output, "w", newline="", encoding="utf-8") as fh:
+    with Path(args.output).open("w", newline="", encoding="utf-8") as fh:
         writer = DictWriter(fh, fieldnames=_union_columns(rows), extrasaction="ignore")
         if args.header:
             writer.writeheader()

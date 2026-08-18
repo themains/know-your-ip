@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """Query one IP address against each service that is enabled in the config.
 
 Copy ``examples/know_your_ip.toml`` to ``know_your_ip.toml`` in the working
