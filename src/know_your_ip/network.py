@@ -198,6 +198,7 @@ def rdap_lookup(config: Any, ip: str) -> dict[str, Any]:
     References:
         https://datatracker.ietf.org/doc/html/rfc7483
     """
+    del config
     address = ipaddress.ip_address(ip)
     if not address.is_global:
         return {"rdap.status": "not_globally_routable"}

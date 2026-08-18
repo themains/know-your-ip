@@ -1,11 +1,12 @@
 # Managed by copier — records template version for `copier update`. Do not edit.
-_commit: v1
+_commit: v1.0.1
 _src_path: gh:gojiplus/py-canon
 author_email: suriyant@gmail.com
 author_name: Suriyan Laohaprapanon
-coverage_floor: 0
+coverage_floor: 90
 default_branch: master
-description: Get data on IP addresses
+description: 'Batch IP address enrichment for research: rate-limit aware, cached,
+    reproducible, and useful without API keys'
 needs_cli: true
 org: themains
 package_name: know_your_ip

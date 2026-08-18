@@ -4,8 +4,7 @@ from py_canon.sphinx import configure
 
 configure(
     globals(),
-    # Docstring examples are written against the package's public API, so make
-    # it available to the doctest builder without repeating imports in every
-    # docstring.
+    # Docstring examples use the public API; expose it once for the doctest
+    # builder instead of repeating imports in every example.
     doctest_global_setup="from know_your_ip import *  # noqa: F403",
 )

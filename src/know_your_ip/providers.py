@@ -16,10 +16,12 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
-from .config import KnowYourIPConfig
+if TYPE_CHECKING:
+    from datetime import date
+
+    from .config import KnowYourIPConfig
 
 logger = logging.getLogger(__name__)
 
