@@ -252,7 +252,10 @@ def _fetch(source: RangeSource, ttl: int) -> str | None:
         The payload, or None if it could not be obtained.
     """
     path = _cache_path(source)
-    if path.exists() and (time.time() - path.stat().st_mtime) < ttl:
+    # ttl <= 0 always refetches. The age comparison alone can't be trusted for
+    # that case: Windows' time.time() granularity (~15ms) can measure a
+    # just-written file's age as negative, making `age < 0` spuriously true.
+    if ttl > 0 and path.exists() and (time.time() - path.stat().st_mtime) < ttl:
         return path.read_text(encoding="utf-8")
 
     result = http.request(f"ranges-{source.name}", "GET", source.url, timeout=60)
