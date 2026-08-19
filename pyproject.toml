@@ -67,6 +67,9 @@ test = [
     "nbclient>=0.10",
     "nbformat>=5",
     "ipykernel>=6",
+    # Mirrors the optional pandas extra so pyright can resolve the import in
+    # enrich.py and the to_dataframe tests stop being skipped.
+    "pandas>=2.0",
 ]
 docs = [
     "sphinx>=7.0",
