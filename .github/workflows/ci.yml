@@ -19,7 +19,8 @@ jobs:
     uses: gojiplus/py-canon/.github/workflows/reusable-ci.yml@v1
     with:
       wheel-import: know_your_ip
-      coverage-floor: 90
+      coverage-floor: 96
+      run-preen: true
       # ping, traceroute, and CSV behavior differ across these platforms.
       os: '["ubuntu-latest", "macos-latest", "windows-latest"]'
       python-versions: '["3.11", "3.14"]'
