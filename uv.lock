@@ -1694,8 +1694,8 @@ wheels = [
 
 [[package]]
 name = "py-canon"
-version = "1.0.1"
-source = { git = "https://github.com/gojiplus/py-canon?rev=v1#254362c2c0f5fc332216d455abfc2e3f89957282" }
+version = "1.1.0"
+source = { git = "https://github.com/gojiplus/py-canon?rev=v1#f756be7a6e4dd0ea2a006c215e39ed2e1e29a412" }
 
 [[package]]
 name = "pycparser"
