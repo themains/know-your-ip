@@ -113,7 +113,7 @@ convention = "google"
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q --strict-markers"
+addopts = "-ra -q --strict-markers --strict-config"
 testpaths = ["tests"]
 filterwarnings = [
     "error",
@@ -126,6 +126,8 @@ markers = [
     "real_sleep: test asserts on real timing; do not stub sleep or rate limits",
     "network: makes real network calls; deselect with -m 'not network'",
 ]
+log_level = "INFO"
+xfail_strict = true
 
 [tool.deptry]
 # Exclude directories from scanning
