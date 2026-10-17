@@ -251,7 +251,7 @@ class TestB2LazyGlobalsAreBuiltOnce:
 class TestB3RangeIndexHonoursTtl:
     @responses.activate
     def test_ttl_is_not_ignored_after_the_first_call(self, monkeypatch, tmp_path):
-        """get_index only honoured its ttl while the index was unbuilt, so the
+        """get_index only honored its ttl while the index was unbuilt, so the
         setting appeared to work and did nothing."""
         monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path))
         ranges.reset_index()
@@ -391,7 +391,7 @@ class TestB6DuplicatesAreFetchedOnce:
 
 class TestB7IPv6IsBucketed:
     def test_v6_networks_do_not_share_one_bucket(self):
-        """All v6 in a single bucket is the quadratic behaviour the bucketing
+        """All v6 in a single bucket is the quadratic behavior the bucketing
         exists to avoid."""
         index = RangeIndex()
         # Realistic spread: published v6 ranges differ in their second byte

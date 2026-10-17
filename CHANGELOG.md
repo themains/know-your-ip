@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   two coincide today, so this was latent - but it would have silently produced a
   wrong fingerprint, which is precisely the claim the manifest exists to support.
 - **Every IPv6 range shared one bucket**, so v6 lookups scanned linearly - the
-  quadratic behaviour the bucketing exists to prevent. Buckets are now keyed on
+  quadratic behavior the bucketing exists to prevent. Buckets are now keyed on
   the first two bytes for v6, in a key space disjoint from v4.
 - `canonicalize`, `tidy`, and `range_lookup` are exported, and `schema` and
   `ranges` appear in the API documentation. The join was reachable only through
@@ -60,7 +60,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `CANONICAL`'s field lists are documented as ordered most-authoritative-first,
-  because they are: ties are broken by list position. The behaviour was already
+  because they are: ties are broken by list position. The behavior was already
   deterministic and defensible; the comment claiming the order was insignificant
   was not.
 
@@ -107,7 +107,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   beside your results and the table can be regenerated and defended.
 - The MaxMind provider is now tested against a genuine `.mmdb` file, using the
   small Apache-2.0 test database from MaxMind's own MaxMind-DB repository. No
-  licence key or 60 MB download needed. Everything about that provider was
+  license key or 60 MB download needed. Everything about that provider was
   previously mocked, and a mock would not have caught the record-shape change
   that broke it when geoip2 5.0 removed `.raw`.
 

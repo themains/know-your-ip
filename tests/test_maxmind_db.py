@@ -232,7 +232,7 @@ class TestMaxMindProviderAgainstRealDatabase:
 
     MaxMind publishes small test databases under Apache-2.0 in the MaxMind-DB
     repository, so the provider can be verified against the real binary format
-    without a licence key or a 60 MB download. Everything before this was
+    without a license key or a 60 MB download. Everything before this was
     mocked, which would not have caught a change in the record shape - and a
     change in the record shape is exactly what broke this provider when geoip2
     5.0 removed `.raw`.

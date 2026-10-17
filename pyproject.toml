@@ -155,6 +155,7 @@ allow-init-docstring = true
 exclude = '\.venv|tests|docs'
 
 [tool.codespell]
+builtin = "clear,rare,en-GB_to_en-US"
 # The presentation PDF is a binary artifact; scanning it yields only noise.
 # Generated artifacts (Sphinx output, lockfiles, the presentation PDF)
 # yield only noise.

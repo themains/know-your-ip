@@ -99,7 +99,7 @@ dataset as a side effect.
 
 ## What you can find out
 
-Organised by the question, not by the vendor.
+Organized by the question, not by the vendor.
 
 | Question | Where it comes from | Needs an account? |
 |---|---|---|
@@ -178,7 +178,7 @@ print(result.manifest["providers"])
 
 No provider can answer for 2019 yet, so none of them pretends to — you get an
 empty provider list rather than today's data wearing a 2019 label. As
-historical sources land they'll honour the same contract.
+historical sources land they'll honor the same contract.
 
 ## Install
 
@@ -237,7 +237,7 @@ know_your_ip download-db --account-id YOUR_ID --license-key YOUR_KEY
 ```
 
 It lands where the package looks for it, with no further configuration.
-GeoLite2 allows 30 downloads per 24 hours, and its licence requires deleting
+GeoLite2 allows 30 downloads per 24 hours, and its license requires deleting
 outdated copies within 30 days.
 
 ## Where to look next
