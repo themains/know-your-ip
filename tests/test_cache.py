@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -82,6 +84,22 @@ class TestCache:
         cache.put("8.8.8.8", "virustotal", "fp", {"rep": 1})
 
         assert cache.get("8.8.8.8", "virustotal", "fp", timedelta(hours=1)) is not None
+
+    def test_rejected_write_rolls_back_and_connection_recovers(self, cache):
+        with closing(sqlite3.connect(cache.path)) as conn:
+            conn.execute(
+                "CREATE TRIGGER reject_observation AFTER INSERT ON observations "
+                "BEGIN SELECT RAISE(FAIL, 'observation rejected'); END"
+            )
+
+        with pytest.raises(sqlite3.IntegrityError, match="observation rejected"):
+            cache.put("8.8.8.8", "virustotal", "fp", {"rep": 1})
+
+        assert cache.get("8.8.8.8", "virustotal", "fp") is None
+        with closing(sqlite3.connect(cache.path)) as conn:
+            conn.execute("DROP TRIGGER reject_observation")
+        cache.put("8.8.8.8", "virustotal", "fp", {"rep": 2})
+        assert cache.get("8.8.8.8", "virustotal", "fp") == {"rep": 2}
 
     def test_survives_reopen(self, tmp_path):
         path = tmp_path / "obs.sqlite"
