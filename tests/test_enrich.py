@@ -330,3 +330,54 @@ class TestEnrichCsv:
         enrich_csv(src, config=offline)
 
         assert list(tmp_path.iterdir()) == [src]
+
+
+class TestResultViews:
+    @pytest.fixture
+    def result(self):
+        return EnrichResult(
+            records=[
+                {
+                    "ip": "8.8.8.8",
+                    "maxmind.country.iso_code": "US",
+                    "rdap.country": "GB",
+                }
+            ]
+        )
+
+    def test_disagreement_preserves_vendor_answers(self, result):
+        (disagreement,) = result.disagreements
+        assert disagreement["ip"] == "8.8.8.8"
+        assert disagreement["field"] == "country_code"
+        assert set(disagreement["values"].split("|")) == {"US", "GB"}
+        assert set(disagreement["sources"].split("|")) == {"maxmind", "rdap"}
+        assert disagreement["chosen"] in {"US", "GB"}
+
+    @pytest.mark.parametrize("shape", ["raw", "tidy"])
+    def test_dataframe_and_csv_preserve_the_selected_view(
+        self, result, tmp_path, shape
+    ):
+        frame = result.to_dataframe(shape=shape)
+        destination = result.to_csv(tmp_path / "view.csv", shape=shape)
+        with destination.open(newline="", encoding="utf-8") as stream:
+            reader = csv.DictReader(stream)
+            rows = list(reader)
+            assert reader.fieldnames == list(frame.columns)
+        assert rows == frame.to_dict(orient="records")
+        assert {row["ip"] for row in rows} == {"8.8.8.8"}
+        if shape == "raw":
+            assert rows[0]["maxmind.country.iso_code"] == "US"
+            assert rows[0]["rdap.country"] == "GB"
+        else:
+            assert {row["value"] for row in rows} == {"US", "GB"}
+            assert {row["source"] for row in rows} == {"maxmind", "rdap"}
+
+    def test_unknown_dataframe_shape_is_rejected(self, result):
+        with pytest.raises(ValueError, match="shape must be canonical, raw, or tidy"):
+            result.to_dataframe(shape="wide")
+
+    def test_unknown_csv_shape_does_not_create_a_file(self, result, tmp_path):
+        destination = tmp_path / "invalid.csv"
+        with pytest.raises(ValueError, match="shape must be canonical, raw, or tidy"):
+            result.to_csv(destination, shape="wide")
+        assert not destination.exists()
