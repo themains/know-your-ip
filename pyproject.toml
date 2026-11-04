@@ -111,6 +111,9 @@ convention = "google"
 "docs/**" = ["D"]
 "examples/**" = ["T20", "D"]
 
+[tool.coverage.run]
+source = ["src/know_your_ip"]
+
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = "-ra -q --strict-markers --strict-config"
