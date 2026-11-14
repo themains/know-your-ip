@@ -443,7 +443,7 @@ def render_default_config() -> str:
     registration = {
         "geonames": "https://www.geonames.org/login",
         "abuseipdb": "https://www.abuseipdb.com/register",
-        "apivoid": "https://app.apivoid.com/register",
+        "apivoid": "https://dash.apivoid.com/register/",
         "censys": "https://platform.censys.io/",
         "shodan": "https://account.shodan.io/register",
         "virustotal": "https://www.virustotal.com/gui/join-us",

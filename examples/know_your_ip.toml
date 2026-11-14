@@ -40,7 +40,7 @@ ttl_seconds = 86400
 
 [apivoid]
 enabled = false
-# api_key = "your_value_here"  # Register at https://app.apivoid.com/register
+# api_key = "your_value_here"  # Register at https://dash.apivoid.com/register/
 
 [censys]
 enabled = false
