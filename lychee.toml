@@ -1,0 +1,13 @@
+# Patterns are written without a scheme: preen's links check scans this file
+# too, and a pattern with one would be extracted and checked as a link.
+
+# Two API bases here are alive but only answer with a path, so fetching them
+# bare reports a dead link for an endpoint this package uses successfully:
+#
+#   rdap.arin.net/registry/            -> 404
+#   rdap.arin.net/registry/ip/8.8.8.8  -> 200   (what the code actually calls)
+#   api.platform.censys.io             -> 404   (called as /v3/global/asset/...)
+exclude = [
+  'rdap\.arin\.net',
+  'api\.platform\.censys\.io',
+]
