@@ -40,7 +40,7 @@ version = "0.6.2"
 # already reports location.time_zone, so this is an opt-in cross-check.
 timezone = ["timezonefinder>=6.0"]
 shodan = ["shodan>=1.31"]
-pandas = ["pandas>=2.0"]
+pandas = ["pandas>=2.2.3"]
 
 [dependency-groups]
 dev = [
