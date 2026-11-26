@@ -30,7 +30,7 @@ requires-python = ">=3.13"
 dependencies = [
     "maxminddb>=3.0",
     "requests>=2.31",
-    "pydantic>=2.0"
+    "pydantic>=2.9.0"
 ]
 version = "0.6.2"
 
