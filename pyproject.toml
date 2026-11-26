@@ -38,7 +38,7 @@ version = "0.6.2"
 # Real optional features. timezonefinder ships wheels only for linux-x86_64 and
 # is ~55MB; every other platform builds it from source. MaxMind's City database
 # already reports location.time_zone, so this is an opt-in cross-check.
-timezone = ["timezonefinder>=6.0"]
+timezone = ["timezonefinder>=6.5.8"]
 shodan = ["shodan>=1.31"]
 pandas = ["pandas>=2.2.3"]
 

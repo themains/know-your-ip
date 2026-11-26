@@ -973,7 +973,7 @@ requires-dist = [
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "requests", specifier = ">=2.31" },
     { name = "shodan", marker = "extra == 'shodan'", specifier = ">=1.31" },
-    { name = "timezonefinder", marker = "extra == 'timezone'", specifier = ">=6.0" },
+    { name = "timezonefinder", marker = "extra == 'timezone'", specifier = ">=6.5.8" },
 ]
 provides-extras = ["timezone", "shodan", "pandas"]
 
